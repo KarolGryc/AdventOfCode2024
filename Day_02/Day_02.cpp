@@ -35,13 +35,18 @@ int main(int argc, char* args[])
 	}
 
 	for (const std::string& argument : runtimeArgs) {
-		std::vector<Report> reports{ parseFileOfReports(argument) };
-		std::cout	<< "Number of safe reports in file " 
-					<< argument << ": "
-					<< countSafeReports(reports) << std::endl;
-		std::cout	<< "Number of safe reports (with dampener) in file "
-					<< argument << ": "
-					<< countSafeReportsDamp(reports) << std::endl;
+		try {
+			std::vector<Report> reports{ parseFileOfReports(argument) };
+			std::cout << "Number of safe reports in file "
+				<< argument << ": "
+				<< countSafeReports(reports) << std::endl;
+			std::cout << "Number of safe reports (with dampener) in file "
+				<< argument << ": "
+				<< countSafeReportsDamp(reports) << std::endl;
+		}
+		catch (std::runtime_error& e) {
+			std::cout << e.what();
+		}
 	}
 
 	return 0;
@@ -60,7 +65,7 @@ std::vector<std::string> argsToString(int argc, char* args[])
 
 
 
-Report parseReport(const std::string& report) 
+Report parseReport(const std::string& report)
 {
 	Report result;
 
@@ -90,7 +95,7 @@ std::vector<Report> parseFileOfReports(const std::string& fileName)
 	std::string line;
 	while (std::getline(file, line)) {
 		try {
-			reports.push_back(parseReport(line));
+			reports.emplace_back(parseReport(line));
 		}
 		catch (std::invalid_argument& e) {
 			std::cerr << e.what() << std::endl;
@@ -120,7 +125,7 @@ bool isReportSafe(const Report& report, int minInterval, int maxInterval)
 	}
 
 	bool isIncreasing = report[0] < report[1];
-	auto isSafe = isIncreasing ? isSafeIncrease : isSafeDecrease; 
+	auto isSafe = isIncreasing ? isSafeIncrease : isSafeDecrease;
 
 	for (size_t i = 0; i < n - 1; ++i) {
 		if (!isSafe(report[i], report[i + 1], minInterval, maxInterval))
@@ -133,20 +138,24 @@ bool isReportSafe(const Report& report, int minInterval, int maxInterval)
 
 uint64_t countSafeReports(const std::vector<Report>& reports)
 {
-	return std::count_if(reports.begin(), reports.end(), 
-						[](auto r) { return isReportSafe(r, 1, 3); });
+	constexpr int minDiff = 1;
+	constexpr int maxDiff = 3;
+	return std::count_if(reports.begin(), reports.end(),
+		[&](const auto& r) { return isReportSafe(r, minDiff, maxDiff); });
 }
 
 uint64_t countSafeReportsDamp(const std::vector<Report>& reports)
 {
+	constexpr int minDiff = 1;
+	constexpr int maxDiff = 3;
 	return std::count_if(reports.begin(), reports.end(),
-		[](auto r) { return isReportSafeDamp(r, 1, 3); });
+		[&](const auto& r) { return isReportSafeDamp(r, minDiff, maxDiff); });
 }
 
 bool isReportSafeDamp(const Report& report, int minInterval, int maxInterval)
 {
 	size_t n = report.size();
-	if (n < 2) {
+	if (n <= 2) {
 		return true;
 	}
 
