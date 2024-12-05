@@ -10,6 +10,7 @@ namespace aoc{
 		return parsedArgs;
 	}
 	
+
 	std::vector<std::string> loadFile(const std::string& fileName)
 	{
 		std::ifstream file(fileName);

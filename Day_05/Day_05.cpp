@@ -1,72 +1,10 @@
-﻿#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <unordered_map>
-#include <unordered_set>
-#include <algorithm>
+﻿#include <iostream>
 #include <utils.hpp>
+#include "PageRules.hpp"
+#include "Pages.hpp"
 
-class PageRules 
-{
-public:
-	void displayRules() {
-		for (auto& [key, val] : m_rules) {
-			std::cout << key << ":\n";
-			for (auto el : val) {
-				std::cout << "\t" << el << " ";
-			}
-			std::cout << std::endl;
-		}
-	}
-
-	void addRule(int destinationPageNum, int requiredBeforePageNum)
-	{
-		m_rules[destinationPageNum].insert(requiredBeforePageNum);
-	}
-
-	const std::unordered_set<int>& getConstraintsFor(int pageNum) const
-	{
-		if (m_rules.contains(pageNum)) {
-			return m_rules.at(pageNum);
-		}
-		else {
-			return m_emptySet;
-		}
-	}
-
-private:
-	std::unordered_map<int, std::unordered_set<int>> m_rules;
-	std::unordered_set<int> m_emptySet;
-};
-
-class Pages : public std::vector<int>
-{
-public:
-	bool areValid(const PageRules& rules) const
-	{
-		std::unordered_set<int> numsAfterCurr{ this->begin(), this->end()};
-		for(auto pageNum : *this) {
-			const auto& requiredBefore = rules.getConstraintsFor(pageNum);
-			for (int num : numsAfterCurr)
-			{
-				if (requiredBefore.contains(num))
-					return false;
-			}
-			numsAfterCurr.erase(pageNum);
-		}
-		return true;
-	}
-
-	int getMidPage() const
-	{
-		return (*this)[this->size() / 2];
-	}
-};
-
-PageRules loadRulesFromFile(const std::string& fileName);
-std::vector<Pages> loadPagesFromFile(const std::string& fileName);
 uint64_t sumCorrectMidPages(const std::vector<Pages>& pagesVec, const PageRules& rules);
-
+uint64_t sumOfFixedMids(std::vector<Pages> pagesVec, const PageRules& rules);
 
 int main(int argc, char* args[])
 {
@@ -81,16 +19,14 @@ int main(int argc, char* args[])
 		const std::string& rulesFileName = runArgs[0];
 		const std::string& pagesFileName = runArgs[1];
 
-		PageRules rules{ loadRulesFromFile(rulesFileName) };
-		std::vector<Pages> pagesVec{ loadPagesFromFile(pagesFileName) };
+		auto rules = PageRules::loadFromFile(rulesFileName);
+		auto pagesVec = Pages::loadFromFile(pagesFileName);
 
-		rules.displayRules();
+		std::cout << "Sum of pages mids: " 
+			<< sumCorrectMidPages(pagesVec, rules) << std::endl;
 
-		uint64_t sum = sumCorrectMidPages(pagesVec, rules);
-		std::cout << "Sum of mid pages: " << sum;
-
-		sum = sumCorrectMidPages(pagesVec, rules);
-		std::cout << "Sum of mid pages: " << sum;
+		std::cout << "Sum of fixed pages mids: " 
+			<< sumOfFixedMids(pagesVec, rules) << std::endl;
 	}
 	catch (std::exception& e) {
 		std::cerr << e.what() << std::endl;
@@ -110,58 +46,15 @@ uint64_t sumCorrectMidPages(const std::vector<Pages>& pagesVec, const PageRules&
 	return sum;
 }
 
-
-PageRules loadRulesFromFile(const std::string& fileName)
+uint64_t sumOfFixedMids(std::vector<Pages> pagesVec, const PageRules& rules)
 {
-	std::vector<std::string> lines{ aoc::loadFile(fileName) };
-
-	PageRules rules;
-	for (const std::string& line : lines) {
-		if (line.empty()) {
-			continue;
-		}
-
-		std::stringstream ss(line);
-		char separator;
-		int mustBePrintedBefore, mustBePrintedAfter;
-		if (ss >> mustBePrintedBefore >> separator >> mustBePrintedAfter) {
-			rules.addRule(mustBePrintedAfter, mustBePrintedBefore);
-		}
-		else {
-			throw std::runtime_error("Rules file " + fileName + " is damaged");
+	uint64_t sum{};
+	for (auto& pages : pagesVec) {
+		if (!pages.areValid(rules)) {
+			pages.fix(rules);
+			sum += pages.getMidPage();
 		}
 	}
 
-	return rules;
-}
-
-std::vector<Pages> loadPagesFromFile(const std::string& fileName)
-{
-	std::vector<std::string> lines{ aoc::loadFile(fileName) };
-	
-	std::vector<Pages> pagesVec;
-	for (std::string& line : lines) {
-		if (line.empty()) {
-			continue;
-		}
-
-		if (line.back() != ',') {
-			line.push_back(',');
-		}
-
-		std::stringstream ss(line);
-		Pages pages;
-		int pageNum;
-		char separator;
-		while (ss >> pageNum >> separator) {
-			pages.push_back(pageNum);
-		}
-		if (ss.bad()) {
-			throw std::runtime_error("Pages file " + fileName + " is damaged");
-		}
-
-		pagesVec.emplace_back(std::move(pages));
-	}
-
-	return pagesVec;
+	return sum;
 }
