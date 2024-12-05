@@ -3,6 +3,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
 #include <utils.hpp>
 
 class PageRules 
@@ -43,17 +44,15 @@ class Pages : public std::vector<int>
 public:
 	bool areValid(const PageRules& rules) const
 	{
-		std::unordered_set<int> appeared{ this->begin() + 1, this->end()};
-		for(int i = 1; i < size(); ++i)
-		{
-			int pageNum = (*this)[i];
-			const auto& requiredPages = rules.getConstraintsFor(pageNum);
-			for (int requiredPage : requiredPages)
+		std::unordered_set<int> numsAfterCurr{ this->begin(), this->end()};
+		for(auto pageNum : *this) {
+			const auto& requiredBefore = rules.getConstraintsFor(pageNum);
+			for (int num : numsAfterCurr)
 			{
-				if (appeared.contains(requiredPage))
+				if (requiredBefore.contains(num))
 					return false;
 			}
-			appeared.erase(pageNum);
+			numsAfterCurr.erase(pageNum);
 		}
 		return true;
 	}
@@ -85,8 +84,12 @@ int main(int argc, char* args[])
 		PageRules rules{ loadRulesFromFile(rulesFileName) };
 		std::vector<Pages> pagesVec{ loadPagesFromFile(pagesFileName) };
 
+		rules.displayRules();
 
 		uint64_t sum = sumCorrectMidPages(pagesVec, rules);
+		std::cout << "Sum of mid pages: " << sum;
+
+		sum = sumCorrectMidPages(pagesVec, rules);
 		std::cout << "Sum of mid pages: " << sum;
 	}
 	catch (std::exception& e) {
