@@ -1,6 +1,8 @@
 ﻿#include <iostream>
 #include <vector>
 #include <string>
+#include <numeric>
+#include <algorithm>
 #include <utils.hpp>
 
 using Board = std::vector<std::string>;
@@ -46,13 +48,16 @@ public:
 	Point findNextPosition(const Board& board)
 	{
 		Vec2D moveDir{ getDirVector() };
-		Point nextPos = m_pos;
+		Point currPos = m_pos;
 
-		while (nextPos.isInBoard(board) && board[nextPos.y][nextPos.x] != '#') {
-			nextPos += moveDir;
+		while (board[currPos.y][currPos.x] != '#') {
+			currPos += moveDir;
+			if (!currPos.isInBoard(board)) {
+				return { -1,-1 };
+			}
 		}
 
-		return nextPos - moveDir;
+		return currPos - moveDir;
 	}
 
 	Point findNextPositionMarkVisited(Board& board)
@@ -60,9 +65,12 @@ public:
 		Vec2D moveDir{ getDirVector() };
 		Point currPos = m_pos;
 
-		while (currPos.isInBoard(board) && board[currPos.y][currPos.x] != '#') {
+		while (board[currPos.y][currPos.x] != '#') {
 			board[currPos.y][currPos.x] = 'X';
 			currPos += moveDir;
+			if (!currPos.isInBoard(board)) {
+				return { -1,-1 };
+			}
 		}
 
 		return currPos - moveDir;
@@ -78,14 +86,10 @@ private:
 	{
 		switch (m_currDir) {
 			using enum Dir;
-			case UP:
-				return { 0, -1 };
-			case RIGHT: 
-				return { 1, 0 };
-			case DOWN:	
-				return { 0, 1 };
-			case LEFT:	
-				return { -1, 0 };
+			case UP:	return { 0,-1 };
+			case RIGHT: return { 1, 0 };
+			case DOWN:	return { 0, 1 };
+			case LEFT:	return {-1, 0 };
 			default:	return { 0, 0 };
 		}
 	}
@@ -95,10 +99,8 @@ private:
 		RIGHT = 1,
 		DOWN = 2,
 		LEFT = 3
-	};
-
+	} m_currDir = Dir::UP;
 	Point m_pos;
-	Dir m_currDir = Dir::UP;
 };
 
 Point findGuardPos(const Board& board) 
@@ -114,17 +116,18 @@ Point findGuardPos(const Board& board)
 
 uint64_t countVisitedFields(Guard guard, Board board)
 {
-	while (guard.findNextPositionMarkVisited(board).isInBoard(board)) {
+	while (true) {
+		Point nextPos = guard.findNextPositionMarkVisited(board);
+		if (!nextPos.isInBoard(board)) {
+			break;
+		}
+		guard.setPosition(nextPos);
 		guard.rotate90DegRight();
 	}
 
-	uint64_t cnt{};
-	for (auto& row : board) {
-		for (auto c : row) {
-			if (c == 'X') ++cnt;
-		}
-	}
-	return cnt;
+	return std::reduce(board.begin(), board.end(), 0ull,
+		[](uint64_t sum, auto& r) { return sum + std::ranges::count(r, 'X'); }
+	);
 }
 
 int main(int argc, char* args[])
