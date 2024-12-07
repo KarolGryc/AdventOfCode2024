@@ -2,7 +2,14 @@
 #include <vector>
 #include <sstream>
 #include <functional>
+#include <chrono>
 #include "utils.hpp"
+#include <future>
+#include <numeric>
+#include <execution>
+
+#define CUT_UNCORRECT_BRANCHES 1
+#define PARALLEL_EXECUTION 0
 
 class Equation
 {
@@ -60,9 +67,11 @@ private:
 			return sum == m_result;
 		}
 		
+#if CUT_UNCORRECT_BRANCHES == 1
 		if (sum > m_result) {
 			return false;
 		}
+#endif
 
 		int64_t newSum = myOp(sum, *currElemenet);
 		auto nextElemIt = currElemenet + 1;
@@ -140,16 +149,27 @@ public:
 private:
 	uint64_t sumValidEquations(
 		const Equations& equations,
-		const Equation::Operations& operations
+		const Equation::Operations& ops
 	) const
 	{
+#if PARALLEL_EXECUTION == 0
 		uint64_t sum{};
 		for (const Equation& equation : equations) {
-			if (equation.isValid(operations)) {
+			if (equation.isValid(ops)) {
 				sum += equation.getResult();
 			}
 		}
 		return sum;
+#else // parallel causes it to run slowe???
+		return std::transform_reduce(std::execution::par, equations.begin(), equations.end(), 0ull,
+			std::plus<uint64_t>(),
+			[&ops](const Equation& eq) -> uint64_t {
+				if (eq.isValid(ops)) {
+					return eq.getResult();
+				}
+				return 0ull;
+			});
+#endif
 	}
 
 	Equation::Operation m_mul = [](Equation::ResultT a, Equation::ElemT b) {
@@ -166,6 +186,27 @@ private:
 	};
 };
 
+
+class Clock {
+private:
+	std::chrono::high_resolution_clock::time_point startTime;
+	std::chrono::high_resolution_clock::time_point endTime;
+	bool isRunning = false;
+
+public:
+	void start() {
+		startTime = std::chrono::high_resolution_clock::now();
+		isRunning = true;
+	}
+
+	void end() {
+		endTime = std::chrono::high_resolution_clock::now();
+		isRunning = false;
+
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+		std::cout << "Execution time: " << duration << " ms" << std::endl;
+	}
+};
 
 
 int main(int argc, char* args[])
@@ -184,11 +225,18 @@ int main(int argc, char* args[])
 			std::vector<std::string> lines = aoc::loadFile(arg);
 			std::vector<Equation> equations = eqParser.parseEquations(lines);
 
+			
+			Clock c;
+			c.start();
 			std::cout << "For file " << arg << std::endl
-				<< "Sum of valid equations using (+, *): " 
-				<< solution.sumValidEquationsAddMul(equations) << std::endl
-				<< "Sum of valid equations using (+, *, ||): " 
+				<< "Sum of valid equations using (+, *): "
+				<< solution.sumValidEquationsAddMul(equations) << std::endl;
+			c.end();
+
+			c.start();
+			std::cout << "Sum of valid equations using (+, *, ||): " 
 				<< solution.sumValidEquationsAddMulCon(equations) << std::endl;
+			c.end();
 		}
 		catch (std::exception& e) {
 			std::cout << e.what();

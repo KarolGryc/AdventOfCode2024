@@ -1,0 +1,16 @@
+Without cutting incorrect branches:
+	For file input.txt
+	Sum of valid equations using (+, *): 21572148763543
+		Execution time: 326 ms
+	Sum of valid equations using (+, *, ||): 581941094529163
+		Execution time: 24812 ms
+
+With cutting incorrect branches:
+	For file input.txt
+	Sum of valid equations using (+, *): 21572148763543
+		Execution time: 292 ms
+	Sum of valid equations using (+, *, ||): 581941094529163
+		Execution time: 14866 ms
+
+Parallel execution
+
