@@ -2,14 +2,12 @@
 #include <vector>
 #include <sstream>
 #include <functional>
-#include <chrono>
-#include "utils.hpp"
-#include <future>
 #include <numeric>
 #include <execution>
+#include "utils.hpp"
 
 #define CUT_UNCORRECT_BRANCHES 1
-#define PARALLEL_EXECUTION 0
+#define PARALLEL_EXECUTION 1  // parallel is slower in debug!!!
 
 class Equation
 {
@@ -160,7 +158,7 @@ private:
 			}
 		}
 		return sum;
-#else // parallel causes it to run slowe???
+#else
 		return std::transform_reduce(std::execution::par, equations.begin(), equations.end(), 0ull,
 			std::plus<uint64_t>(),
 			[&ops](const Equation& eq) -> uint64_t {
@@ -187,28 +185,6 @@ private:
 };
 
 
-class Clock {
-private:
-	std::chrono::high_resolution_clock::time_point startTime;
-	std::chrono::high_resolution_clock::time_point endTime;
-	bool isRunning = false;
-
-public:
-	void start() {
-		startTime = std::chrono::high_resolution_clock::now();
-		isRunning = true;
-	}
-
-	void end() {
-		endTime = std::chrono::high_resolution_clock::now();
-		isRunning = false;
-
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-		std::cout << "Execution time: " << duration << " ms" << std::endl;
-	}
-};
-
-
 int main(int argc, char* args[])
 {
 	auto runArgs{ aoc::argsToString(argc - 1, args + 1) };
@@ -226,7 +202,7 @@ int main(int argc, char* args[])
 			std::vector<Equation> equations = eqParser.parseEquations(lines);
 
 			
-			Clock c;
+			aoc::SimpleClock c;
 			c.start();
 			std::cout << "For file " << arg << std::endl
 				<< "Sum of valid equations using (+, *): "
