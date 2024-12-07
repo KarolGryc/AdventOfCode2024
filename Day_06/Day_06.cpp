@@ -1,90 +1,58 @@
 ﻿#include <iostream>
 #include <vector>
 #include <string>
-#include <numeric>
-#include <algorithm>
+#include <unordered_set>
 #include <utils.hpp>
 
-using Board = std::vector<std::string>;
 
-struct Vec2D {
-	int x;
-	int y;
+struct Vec2D 
+{
+	int x, y;
 };
 
-struct Point {
-	int x;
-	int y;
 
-	bool isInBoard(const Board& b)
-	{
-		return y >= 0 && y < b.size() && x >= 0 && x < b[y].size();
-	}
+struct Point 
+{
+	int x, y;
 
-	int distance(Point p) 
-	{
-		return std::abs(p.x - this->x) + std::abs(p.x - this->x);
-	}
+	bool operator==(const Point& p) const { return x == p.x && y == p.y; }
+	Point operator+(Vec2D v) const { return{ x + v.x, y + v.y }; }
+	Point operator-(Vec2D v) const { return {x - v.x, y - v.y}; }
+	Point& operator+=(Vec2D v) { return *this = *this + v; }
+};
 
-	Point operator-(Vec2D v)
+template<>
+struct std::hash<Point>
+{
+	size_t operator()(const Point& p) const noexcept
 	{
-		return {x - v.x, y - v.y};
-	}
-
-	Point& operator+=(Vec2D v)
-	{
-		x += v.x;
-		y += v.y;
-		return *this;
+		return std::hash<int>{}(p.x) ^ std::hash<int>{}(p.y) << 1;
 	}
 };
 
-class Guard {
+
+class Guard 
+{
 public:
-	Guard(Point position) : m_pos{ position } {};
+	enum class Dir {
+		UP = 0,
+		RIGHT = 1,
+		DOWN = 2,
+		LEFT = 3
+	};
 
-	void setPosition(Point position) { m_pos = position; };
+	Guard(Point pos = {}, Dir dir = Dir::UP) : m_pos{pos}, m_dir{dir} {};
+	Point getPosition() const { return m_pos; }
+	Point getNextStep() const { return  m_pos + getDirVector(); }
 
-	Point findNextPosition(const Board& board)
-	{
-		Vec2D moveDir{ getDirVector() };
-		Point currPos = m_pos;
-
-		while (board[currPos.y][currPos.x] != '#') {
-			currPos += moveDir;
-			if (!currPos.isInBoard(board)) {
-				return { -1,-1 };
-			}
-		}
-
-		return currPos - moveDir;
-	}
-
-	Point findNextPositionMarkVisited(Board& board)
-	{
-		Vec2D moveDir{ getDirVector() };
-		Point currPos = m_pos;
-
-		while (board[currPos.y][currPos.x] != '#') {
-			board[currPos.y][currPos.x] = 'X';
-			currPos += moveDir;
-			if (!currPos.isInBoard(board)) {
-				return { -1,-1 };
-			}
-		}
-
-		return currPos - moveDir;
-	}
-
-	void rotate90DegRight()
-	{
-		m_currDir = static_cast<Dir>(((int)m_currDir + 1) % 4);
-	}
+	void moveTo(Point position) { m_pos = position; };
+	void turnRight() { m_dir = static_cast<Dir>(((int)m_dir + 1) % 4); }
+	bool facesUp() { return m_dir == Dir::UP; }
 
 private:
-	Vec2D getDirVector()
+	Vec2D getDirVector() const
 	{
-		switch (m_currDir) {
+		switch (m_dir) {
 			using enum Dir;
 			case UP:	return { 0,-1 };
 			case RIGHT: return { 1, 0 };
@@ -94,41 +62,144 @@ private:
 		}
 	}
 
-	enum class Dir {
-		UP = 0,
-		RIGHT = 1,
-		DOWN = 2,
-		LEFT = 3
-	} m_currDir = Dir::UP;
+	Dir m_dir = Dir::UP;
 	Point m_pos;
 };
 
-Point findGuardPos(const Board& board) 
+class Board
 {
-	for (int y = 0; y < board.size(); y++) {
-		for (int x = 0; x < board[y].size(); x++) {
-			if (board[y][x] == '^')
-				return { x, y };
-		}
-	}
-	return { -1, -1 };
-}
+public:
+	Board(const std::vector<std::string>& board)
+		:	m_board{ board }, 
+			m_initialGuardPos{ findGuardOnBoard() } 
+	{}
 
-uint64_t countVisitedFields(Guard guard, Board board)
-{
-	while (true) {
-		Point nextPos = guard.findNextPositionMarkVisited(board);
-		if (!nextPos.isInBoard(board)) {
-			break;
-		}
-		guard.setPosition(nextPos);
-		guard.rotate90DegRight();
+	Board(std::vector<std::string>&& board)
+		:	m_board{ std::move(board) }, 
+			m_initialGuardPos{ findGuardOnBoard() } 
+	{}
+
+	bool contains(const Point& p) const
+	{
+		return p.y >= 0 && p.y < sizeY() && p.x >= 0 && p.x < sizeX(p.y);
 	}
 
-	return std::reduce(board.begin(), board.end(), 0ull,
-		[](uint64_t sum, auto& r) { return sum + std::ranges::count(r, 'X'); }
-	);
+	void addObstacle(const Point& p)
+	{
+		m_board[p.y][p.x] = m_obstacleChar;
+	}
+
+	void removeObstacle(const Point& p)
+	{
+		m_board[p.y][p.x] = m_defaultChar;
+	}
+
+	std::unordered_set<Point> getVisitedFields() const
+	{
+		Guard guard;
+		try { guard.moveTo(getInitialGuardPosition()); }
+		catch (std::runtime_error) { return {}; }
+
+		std::unordered_set<Point> visitedTiles{ guard.getPosition() };
+		Point nextTile = guard.getNextStep();
+		while (contains(nextTile)) {
+			if (isObstacle(nextTile)) {
+				guard.turnRight();
+			}
+			else {
+				guard.moveTo(nextTile);
+				visitedTiles.insert(nextTile);
+			}
+			nextTile = guard.getNextStep();
+		}
+
+		return visitedTiles;
+	}
+
+	bool isGuardPathLooped() const
+	{
+		Guard guard;
+		try { guard.moveTo(m_initialGuardPos); }
+		catch (std::runtime_error) { return false; }
+
+		std::unordered_set<Point> visitedUpTiles{ guard.getPosition() };
+		Point nextStep = guard.getNextStep();
+		while (contains(nextStep)) {
+			isObstacle(nextStep) ? guard.turnRight() : guard.moveTo(nextStep);
+
+			if (guard.facesUp()) {
+				if (visitedUpTiles.contains(nextStep)) {
+					return true;
+				}
+				visitedUpTiles.insert(nextStep);
+			}
+
+			nextStep = guard.getNextStep();
+		}
+
+		return false;
+	}
+
+	Point getInitialGuardPosition() const
+	{
+		return m_initialGuardPos;
+	}
+
+	size_t sizeY() const
+	{
+		return m_board.size();
+	}
+
+	size_t sizeX(size_t row) const
+	{
+		return m_board[row].size();
+	}
+
+private:
+	bool isObstacle(const Point& p) const
+	{
+		return m_board[p.y][p.x] == m_obstacleChar;
+	}
+
+	Point findGuardOnBoard()
+	{
+		for (int y = 0; y < sizeY(); y++) {
+			for (int x = 0; x < sizeX(y); x++) {
+				if (m_board[y][x] == m_guardChar)
+					return { x,y };
+			}
+		}
+		throw std::runtime_error("No guard on given board!");
+	}
+
+	static constexpr const char m_guardChar = '^';
+	static constexpr const char m_obstacleChar = '#';
+	static constexpr const char m_defaultChar = '.';
+
+	std::vector<std::string> m_board;
+	Point m_initialGuardPos;
+};
+
+uint64_t countVisitedFields(const Board& board)
+{
+	return board.getVisitedFields().size();
 }
+
+uint64_t countLoopingObstacles(Board& board) 
+{
+	auto visitedFields = board.getVisitedFields();
+	visitedFields.erase(board.getInitialGuardPosition());
+
+	uint64_t cnt{};
+	for (const Point& field : visitedFields) {
+		board.addObstacle(field);
+		cnt += board.isGuardPathLooped();
+		board.removeObstacle(field);
+	}
+
+	return cnt;
+}
+
 
 int main(int argc, char* args[])
 {
@@ -140,14 +211,18 @@ int main(int argc, char* args[])
 
 	for (const std::string& arg : runtimeArgs) {
 		try {
-			Board board = aoc::loadFile(arg);
-			Guard guard(findGuardPos(board));
-			std::cout << "Fields visited in " << arg << ": " 
-						<< countVisitedFields(guard, board);
+			Board board{ aoc::loadFile(arg) };
+			std::cout
+				<< "File: " << arg << std::endl
+				<< "Number of visited fields: "
+				<< countVisitedFields(board) << std::endl
+				<< "Number of looping obstacles: "
+				<< countLoopingObstacles(board) << std::endl;
 		}
 		catch (std::exception& e) {
 			std::cout << e.what() << std::endl;
 		}
 	}
+
 	return 0;
 }
