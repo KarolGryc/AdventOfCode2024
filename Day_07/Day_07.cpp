@@ -4,10 +4,19 @@
 #include <functional>
 #include <numeric>
 #include <execution>
+#include <cmath>
 #include "utils.hpp"
+
 
 #define CUT_UNCORRECT_BRANCHES 1
 #define PARALLEL_EXECUTION 1  // parallel is slower in debug!!!
+#define STRING_CONCAT 0
+#if STRING_CONCAT == 0
+	#define LOG_CONCAT 0
+	#if LOG_CONCAT == 0
+		#include "unreadableOptimisations.hpp"
+	#endif
+#endif
 
 class Equation
 {
@@ -39,7 +48,7 @@ public:
 			return m_result == 0;
 		}
 
-		int firstElem = m_elements.front();
+		ElemT firstElem = m_elements.front();
 		ElemIterator nextElemIt = m_elements.cbegin() + 1;
 
 		for (const Operation& op : operations) {
@@ -64,14 +73,15 @@ private:
 		if (currElemenet == m_elements.cend()) {
 			return sum == m_result;
 		}
-		
-#if CUT_UNCORRECT_BRANCHES == 1
-		if (sum > m_result) {
+
+		ResultT newSum = myOp(sum, *currElemenet);
+
+	#if CUT_UNCORRECT_BRANCHES == 1
+		if (newSum > m_result) {
 			return false;
 		}
-#endif
+	#endif
 
-		int64_t newSum = myOp(sum, *currElemenet);
 		auto nextElemIt = currElemenet + 1;
 		for (const Operation& op : callOps) {
 			if (validityCheck(newSum, nextElemIt, op, callOps)) {
@@ -82,8 +92,9 @@ private:
 	}
 
 
-	ResultT m_result;
-	std::vector<ElemT> m_elements;
+	const ResultT m_result;
+	const std::vector<ElemT> m_elements;
+	const ElemIterator m_end;
 };
 using Equations = std::vector<Equation>;
 
@@ -159,7 +170,9 @@ private:
 		}
 		return sum;
 #else
-		return std::transform_reduce(std::execution::par, equations.begin(), equations.end(), 0ull,
+		return std::transform_reduce(std::execution::par_unseq, 
+			equations.begin(), equations.end(), 
+			0ull,
 			std::plus<uint64_t>(),
 			[&ops](const Equation& eq) -> uint64_t {
 				if (eq.isValid(ops)) {
@@ -180,7 +193,17 @@ private:
 
 	// May be more efficient using log10
 	Equation::Operation m_con = [](Equation::ResultT a, Equation::ElemT b) {
+#if STRING_CONCAT == 1
 		return std::stoull(std::to_string(a) + std::to_string(b));
+#else
+	#if LOG_CONCAT == 1
+		int numberOfDigits = static_cast<int>(log10(b)) + 1;
+		return a * static_cast<uint64_t>(pow(10, numberOfDigits)) + b;
+	#else		
+		int numberOfDigits = unreadable::numDigits(b);
+		return a * unreadable::powersOf10[numberOfDigits] + b;
+	#endif
+#endif
 	};
 };
 

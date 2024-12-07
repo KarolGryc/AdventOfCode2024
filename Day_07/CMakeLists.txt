@@ -9,7 +9,7 @@ project ("Day_07")
 
 set(EXTERNAL_DIR "../utils")
 file(GLOB EXTERNAL_SOURCES "${EXTERNAL_DIR}/*.cpp" "${EXTERNAL_DIR}/*.hpp")
-add_executable (Day_07 "Day_07.cpp" ${EXTERNAL_SOURCES})
+add_executable (Day_07 "Day_07.cpp" ${EXTERNAL_SOURCES} "unreadableOptimisations.cpp")
 target_include_directories(Day_07 PRIVATE ${EXTERNAL_DIR})
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
