@@ -96,11 +96,8 @@ public:
 
 	std::unordered_set<Point> getVisitedFields() const
 	{
-		Guard guard;
-		try { guard.moveTo(getInitialGuardPosition()); }
-		catch (std::runtime_error) { return {}; }
-
-		std::unordered_set<Point> visitedTiles{ guard.getPosition() };
+		Guard guard(m_initialGuardPos);
+		std::unordered_set<Point> visitedTiles{ m_initialGuardPos };
 		Point nextTile = guard.getNextStep();
 		while (contains(nextTile)) {
 			if (isObstacle(nextTile)) {
@@ -118,20 +115,22 @@ public:
 
 	bool isGuardPathLooped() const
 	{
-		Guard guard;
-		try { guard.moveTo(m_initialGuardPos); }
-		catch (std::runtime_error) { return false; }
-
-		std::unordered_set<Point> visitedUpTiles{ guard.getPosition() };
+		std::unordered_set<Point> visitedUpTiles{m_initialGuardPos};
+		Guard guard(m_initialGuardPos);
 		Point nextStep = guard.getNextStep();
-		while (contains(nextStep)) {
-			isObstacle(nextStep) ? guard.turnRight() : guard.moveTo(nextStep);
 
-			if (guard.facesUp()) {
-				if (visitedUpTiles.contains(nextStep)) {
-					return true;
+		while (contains(nextStep)) {
+			if (isObstacle(nextStep)) {
+				if (guard.facesUp()) {
+					if (visitedUpTiles.contains(nextStep)) {
+						return true;
+					}
+					visitedUpTiles.insert(nextStep);
 				}
-				visitedUpTiles.insert(nextStep);
+				guard.turnRight();
+			}
+			else {
+				guard.moveTo(nextStep);
 			}
 
 			nextStep = guard.getNextStep();
