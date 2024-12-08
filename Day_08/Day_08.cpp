@@ -1,6 +1,9 @@
-﻿#include "utils.hpp"
+﻿#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
+#include <execution>
+#include "utils.hpp"
 
 struct Vec2D
 {
@@ -46,26 +49,45 @@ public:
 		m_antennaPositions{ std::move(antennaPositions) }
 	{}
 
-	void display()
+	void displayVisualizationWithNodes() const 
 	{
-		for (auto& [key, val] : m_antennaPositions) {
-			std::cout << key << std::endl;
-			for (auto& el : val) {
-				std::cout << "<" << el.x << "," << el.y << "> ";
+		std::vector<std::string> lines(m_sizeY);
+		std::for_each(std::execution::par, lines.begin(), lines.end(),
+			[this](std::string& line) { line = std::string(m_sizeX, '.');});
+
+		for (const auto& [freqName, positions] : m_antennaPositions) {
+			for (const auto& pos : positions) {
+				lines[pos.y][pos.x] = freqName;
 			}
-			std::cout << std::endl;
+		}
+
+		const auto& nodes = getAntinodes();
+		for (const auto& node : nodes) {
+			lines[node.y][node.x] = '#';
+		}
+
+		for (const auto& line : lines) {
+			std::cout << line << std::endl;
 		}
 	}
 
 	std::unordered_set<Position> getAntinodes() const
 	{
 		std::unordered_set<Position> result;
-
 		for (const auto& [freq, pos] : m_antennaPositions) {
 			const auto& antinodes = getAntinodes(freq);
-			for (auto& antinode : antinodes) {
-				result.insert(antinode);
-			}
+			result.insert(antinodes.begin(), antinodes.end());
+		}
+
+		return result;
+	}
+
+	std::unordered_set<Position> getAntinodesInLine() const
+	{
+		std::unordered_set<Position> result;
+		for (const auto& [freq, pos] : m_antennaPositions) {
+			const auto& antinodes = getAntinodesInLine(freq);
+			result.insert(antinodes.begin(), antinodes.end());
 		}
 
 		return result;
@@ -77,20 +99,17 @@ public:
 			return {};
 		}
 
-		const auto& freqPositions = m_antennaPositions.at(freqName);
 		std::unordered_set<Position> antinodePositions;
+		const auto& freqPositions = m_antennaPositions.at(freqName);
 
-		// we suppose that antinode can be on another antenna
-		int size = freqPositions.size();
-		for (int i = 0; i < size; i++) {
-			for (int j = 0; j < size; j++) {
-				if (i == j) continue;
+		for (const Position& aPos : freqPositions) {
+			for (const Position& bPos : freqPositions) {
+				if (&aPos == &bPos) {
+					continue;
+				}
 
-				Position aPos = freqPositions[i];
-				Position bPos = freqPositions[j];
 				Vec2D offset = bPos - aPos;
 				Position antinodePos = bPos + offset;
-
 				if (contains(antinodePos)) {
 					antinodePositions.insert(antinodePos);
 				}
@@ -99,6 +118,34 @@ public:
 
 		return antinodePositions;
 	}
+
+	std::unordered_set<Position> getAntinodesInLine(FreqName freqName) const
+	{
+		if (!m_antennaPositions.contains(freqName)) {
+			return {};
+		}
+
+		std::unordered_set<Position> antinodePositions;
+		const auto& freqPositions = m_antennaPositions.at(freqName);
+
+		for (const Position& aPos : freqPositions) {
+			for (const Position& bPos : freqPositions) {
+				if (&aPos == &bPos) {
+					continue;
+				}
+
+				Vec2D offset = bPos - aPos;
+				Position antinodePos = bPos;
+				while (contains(antinodePos)) {
+					antinodePositions.insert(antinodePos);
+					antinodePos += offset;
+				}
+			}
+		}
+
+		return antinodePositions;
+	}
+
 
 private:
 	bool contains(const Position& p) const 
@@ -118,6 +165,11 @@ public:
 	size_t countAntinodesLocation(const AntennaMap& map) const 
 	{
 		return map.getAntinodes().size();
+	}
+
+	size_t countAntinodesInLines(const AntennaMap& map) const
+	{
+		return map.getAntinodesInLine().size();
 	}
 };
 
@@ -170,11 +222,14 @@ int main(int argc, char* args[])
 		try {
 			auto dataLines = aoc::loadFile(arg);
 			AntennaMap map = parser.parseMap(dataLines);
-			
+
 			ResonantCollinearitySolution solution;
-			std::cout << "Number of unique locations for file "
-				<< arg << ": "
+			std::cout << "File " << arg << ": " << std::endl
+				<< "\tUnique antinodes: " 
 				<< solution.countAntinodesLocation(map)
+				<< std::endl
+				<< "\tUnique antinodes in lines: "
+				<< solution.countAntinodesInLines(map)
 				<< std::endl;
 		}
 		catch (std::exception& e) {
