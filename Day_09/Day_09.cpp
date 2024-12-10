@@ -192,7 +192,7 @@ public:
 						break;
 					}
 				}
-				emptyIt++;
+				++emptyIt;
 			}
 
 			++filledIt;

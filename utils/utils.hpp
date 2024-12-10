@@ -19,6 +19,24 @@ namespace aoc{
 		return false;
 	}
 	
+	
+	struct Vec2D
+	{
+		int x;
+		int y;
+	};
+
+	struct Position
+	{
+		int x;
+		int y;
+		
+		bool operator==(const Position& p) const { return p.x == x && p.y == y; }
+		Vec2D operator-(const Position& p) const { return { x - p.x, y - p.y }; }
+		Position operator+(const Vec2D& v) const { return { x + v.x, y + v.y }; }
+		Position operator+=(const Vec2D& v) { return *this = *this + v; }
+	};
+	
 	class SimpleClock {
 	private:
 		std::chrono::high_resolution_clock::time_point startTime;
@@ -43,3 +61,13 @@ namespace aoc{
 		}
 	};
 }
+
+
+template<>
+struct std::hash<aoc::Position>
+{
+	std::size_t operator() (const aoc::Position& p) const 
+	{
+		return std::hash<int>()(p.x) ^ hash<int>()(p.y) << 1;
+	}
+};
