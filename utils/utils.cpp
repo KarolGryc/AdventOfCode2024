@@ -25,4 +25,19 @@ namespace aoc{
 
 		return lines;
 	}
+	
+	uint8_t countDigits(uint64_t num) {
+		if (num == 0) {
+			return 1;
+		}
+		
+		uint8_t cnt{};
+		while(num > 0) {
+			++cnt;
+			num /= 10;
+		}
+		
+		return cnt;
+	}
+	
 }

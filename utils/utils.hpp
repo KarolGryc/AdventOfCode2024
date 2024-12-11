@@ -7,6 +7,7 @@
 namespace aoc{
 	std::vector<std::string> argsToString(int argc, char* args[]);
 	std::vector<std::string> loadFile(const std::string& fileName);
+	uint8_t countDigits(uint64_t num);
 
 	template<typename T>
 	bool setsIntersect(const std::unordered_set<T>& s1, const std::unordered_set<T>& s2)
@@ -18,7 +19,6 @@ namespace aoc{
 		}
 		return false;
 	}
-	
 	
 	struct Vec2D
 	{
