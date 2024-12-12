@@ -48,7 +48,8 @@ public:
 		return m_fields.size();
 	}
 
-	void print() const {
+	void print() const 
+	{
 		for (const auto& row : m_fields) {
 			for (const auto& el : row) {
 				std::cout << el;
@@ -58,7 +59,8 @@ public:
 	}
 
 protected:
-	bool isRectangular() {
+	bool isRectangular() 
+	{
 		if (m_fields.empty()) {
 			return false;
 		}
@@ -77,10 +79,172 @@ protected:
 };
 
 
+class GardenArea
+{
+public:
+	GardenArea() 
+		: m_name{}, m_fields{} 
+	{}
+
+	GardenArea(char name, const std::unordered_set<aoc::Position>& fields)
+		: m_name{ name }, m_fields{ fields }
+	{}
+
+	GardenArea(char name, std::unordered_set<aoc::Position>&& fields)
+		: m_name{name}, m_fields {std::move(fields)}
+	{}
+
+	char getName() const {
+		return m_name;
+	}
+
+	const std::unordered_set<aoc::Position>& getFieldPositions() const {
+		return m_fields;
+	}
+
+	std::unordered_set<aoc::Position> getBorderFields() const 
+	{
+		std::unordered_set<aoc::Position> borderPositions;
+		for (const auto& field : m_fields) {
+			if (isBorder(field)) {
+				borderPositions.insert(field);
+			}
+		}
+		return borderPositions;
+	}
+
+	uint64_t getPerimeter() const {
+		uint64_t perimeter{};
+		auto borderFields = getBorderFields();
+		for (auto& field : borderFields) {
+			perimeter += countEdges(field);
+		}
+
+		return perimeter;
+	}
+
+	uint64_t getArea() const {
+		return m_fields.size();
+	}
+
+private:
+	bool isBorder(const aoc::Position& fieldPos) const 
+	{
+		aoc::Vec2D offsets[]{ {0,-1}, {1, 0}, {0, 1}, {-1,0} };
+		for (const auto& offset : offsets) {
+			if (!m_fields.contains(fieldPos + offset)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	uint8_t countEdges(const aoc::Position& fieldPos) const {
+		uint8_t count{};
+		aoc::Vec2D offsets[]{ {0,-1}, {1, 0}, {0, 1}, {-1,0} };
+		for (const auto& offset : offsets) {
+			if (!m_fields.contains(fieldPos + offset)) {
+				++count;
+			}
+		}
+
+		return count;
+	}
+
+	char m_name;
+	std::unordered_set<aoc::Position> m_fields;
+};
+
+
 class Garden : public RectangularBoard<char>
 {
 public:
 	using RectangularBoard::RectangularBoard;
+
+	GardenArea getAreaAt(const aoc::Position& pos) const 
+	{
+		if (!contains(pos)) {
+			return {};
+		}
+
+		std::unordered_set<aoc::Position> areaPositions{pos};
+		std::queue<aoc::Position> toVisit{ {pos} };
+		while (!toVisit.empty()) {
+			aoc::Position currPos = toVisit.front();
+			toVisit.pop();
+
+			auto neighbours = getValidNeighbors(currPos);
+
+			for (const auto& neighbour : neighbours) {
+				if (!areaPositions.contains(neighbour)) {
+					areaPositions.insert(neighbour);
+					toVisit.push(neighbour);
+				}
+			}
+		}
+
+		char areaName = at(pos);
+		return GardenArea{ areaName, areaPositions };
+	}
+
+	std::vector<GardenArea> getAllAreas() const 
+	{
+		RectangularBoard<bool> visited(sizeX(), sizeY());
+		std::vector<GardenArea> gardenAreas;
+
+		for (int y = 0; y < visited.sizeY(); ++y) {
+			for (int x = 0; x < visited.sizeX(); ++x) {
+				aoc::Position pos{ x,y };
+				if (visited.at(pos) == 1) {
+					continue;
+				}
+
+				GardenArea area = getAreaAt(pos);
+				gardenAreas.push_back(area);
+				for (const auto& position : area.getFieldPositions()) {
+					visited.setAt(position, true);
+				}
+			}
+		}
+
+		return gardenAreas;
+	}
+
+private:
+	std::unordered_set<aoc::Position> getValidNeighbors(
+		const aoc::Position& position) const
+	{
+		auto neighbours = getNeighbours(position);
+		std::unordered_set<aoc::Position> validNeighbours;
+
+		for (const auto& neighbour : neighbours) {
+			if (isValidNeighbour(position, neighbour)) {
+				validNeighbours.insert(neighbour);
+			}
+		}
+
+		return validNeighbours;
+	}
+
+	std::unordered_set<aoc::Position> getNeighbours(const aoc::Position& pos) const
+	{
+		std::unordered_set<aoc::Position> neighbours;
+		aoc::Vec2D offsets[]{ {0,-1}, {1, 0}, {0, 1}, {-1,0} };
+		for (const auto& offset : offsets) {
+			aoc::Position nPos = pos + offset;
+			neighbours.insert(nPos);
+		}
+
+		return neighbours;
+	}
+
+	bool isValidNeighbour(
+		const aoc::Position pos, 
+		const aoc::Position& neigh) const 
+	{
+		return contains(pos) && contains(neigh) && at(pos) == at(neigh);
+	}
 };
 
 
@@ -106,43 +270,10 @@ class GardenValueCalculator
 public:
 	uint64_t calculateValue(const Garden& g)
 	{
-		RectangularBoard<bool> visitedFields(g.sizeX(), g.sizeY());
 		uint64_t sum{};
-
-		for (int y = 0; y < visitedFields.sizeY(); ++y) {
-			for (int x = 0; x < visitedFields.sizeX(); ++x) {
-				if (visitedFields.at({ x, y }) == 0) {
-					
-					uint64_t area = 1ull;
-					uint64_t perimeter{};
-					std::queue<aoc::Position> toVisit;
-					toVisit.push({x,y});
-					while (!toVisit.empty()) {
-						aoc::Position currPos = toVisit.front();
-						toVisit.pop();
-						visitedFields.setAt(currPos, true);
-
-						aoc::Vec2D offsets[]{ {0,-1}, {1, 0}, {0, 1}, {-1,0} };
-						for (const auto& offset : offsets) {
-							aoc::Position newPos = currPos + offset;
-							if (!g.contains(newPos)) {
-								++perimeter;
-							}
-							else if (g.at(newPos) != g.at(currPos)) {
-								++perimeter;
-							}
-							else if(visitedFields.at(newPos) == 0){
-								++area;
-								toVisit.push(newPos);
-								visitedFields.setAt(newPos, true);
-							}
-						}
-
-					}
-					std::cout << g.at({x,y}) << " " << area << " " << perimeter << std::endl;
-					sum += area * perimeter;
-				}
-			}
+		std::vector<GardenArea> areas = g.getAllAreas();
+		for (const auto& area : areas) {
+			sum += area.getArea() * area.getPerimeter();
 		}
 		return sum;
 	}
