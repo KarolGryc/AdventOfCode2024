@@ -45,7 +45,6 @@ public:
 			const std::string lineA = lines[i];
 			const std::string lineB = lines[i + 1];
 			const std::string linePrize = lines[i + 2];
-			
 			ClawMachine machine = parseClawMachine(lineA, lineB, linePrize);
 			result.emplace_back(std::move(machine));
 		}
@@ -97,8 +96,19 @@ public:
 		// solve by linear algebra
 		const Button& btnA = machine.getButtonA();
 		const Button& btnB = machine.getButtonB();
-		const aoc::Position& goalPos = machine.getPrizePos();
+		aoc::Position goalPos = machine.getPrizePos();
+		goalPos.x += 10000000000000;
+		goalPos.y += 10000000000000;
+		int64_t w = btnA.offset.x * btnB.offset.y - btnA.offset.y * btnB.offset.x;
+		int64_t wA = goalPos.x * btnB.offset.y - goalPos.y * btnB.offset.x;
+		int64_t wB = btnA.offset.x * goalPos.y - btnA.offset.y * goalPos.x;
 
+		if (w == 0 || wA % w != 0 || wB % w != 0) {
+			return UINT64_MAX;
+		}
+
+
+		return btnA.cost * (wA / w) + btnB.cost * (wB / w);
 	}
 };
 
@@ -120,9 +130,13 @@ int main(int argc, char* args[])
 		auto machines = parser.parseClawMachines(lines);
 		uint64_t sum{};
 		for (auto& machine : machines) {
-			sum += finder.getMinimumPrizeCost(machine);
+			uint64_t result = finder.getMinimumPrizeCost(machine);
+			std::cout << result << std::endl;
+			if (result != UINT64_MAX) {
+				sum += result;
+			}
 		}
-		std::cout << sum;
+		std::cout << "Result sum = " << sum << std::endl;
 	}
 
 	return 0;

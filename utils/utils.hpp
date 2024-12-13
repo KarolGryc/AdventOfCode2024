@@ -22,8 +22,8 @@ namespace aoc{
 	
 	struct Vec2D
 	{
-		int x;
-		int y;
+		int64_t x;
+		int64_t y;
 		Vec2D operator+(const Vec2D& v) const {
 			return {x + v.x, y + v.y};
 		}
@@ -31,8 +31,8 @@ namespace aoc{
 
 	struct Position
 	{
-		int x;
-		int y;
+		int64_t x;
+		int64_t y;
 		
 		bool operator==(const Position& p) const { return p.x == x && p.y == y; }
 		Vec2D operator-(const Position& p) const { return { x - p.x, y - p.y }; }
