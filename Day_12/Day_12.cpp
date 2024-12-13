@@ -127,6 +127,14 @@ public:
 		return m_fields.size();
 	}
 
+	uint64_t getSidesCount() const {
+		uint64_t sides{};
+		for (auto& field : m_fields) {
+			sides += countCorners(field);
+		}
+		return sides;
+	}
+
 private:
 	bool isBorder(const aoc::Position& fieldPos) const 
 	{
@@ -149,6 +157,27 @@ private:
 			}
 		}
 
+		return count;
+	}
+
+	uint8_t countCorners(const aoc::Position& fieldPos) const {
+		uint8_t count{};
+		aoc::Vec2D offsetsX[] = { {-1, 0}, {1, 0}};
+		aoc::Vec2D offsetsY[] = { {0, -1}, {0, 1} };
+		for (auto& offsetY : offsetsY) {
+			for (auto& offsetX : offsetsX) {
+				aoc::Position horizontal = fieldPos + offsetX;
+				aoc::Position vertical = fieldPos + offsetY;
+				bool containsHorizontal = m_fields.contains(horizontal);
+				bool containsVertical = m_fields.contains(vertical);
+				if (containsHorizontal == false && containsVertical == false) {
+					count++;
+				}
+				else if (containsHorizontal == true && containsVertical == true) {
+					count += !m_fields.contains(fieldPos + offsetX + offsetY);
+				}
+			}
+		}
 		return count;
 	}
 
@@ -268,12 +297,22 @@ public:
 class GardenValueCalculator
 {
 public:
-	uint64_t calculateValue(const Garden& g)
+	uint64_t calculateValue(const Garden& g) const
 	{
 		uint64_t sum{};
 		std::vector<GardenArea> areas = g.getAllAreas();
 		for (const auto& area : areas) {
 			sum += area.getArea() * area.getPerimeter();
+		}
+		return sum;
+	}
+
+	uint64_t calculateDiscountedValue(const Garden& g) const
+	{
+		uint64_t sum{};
+		std::vector<GardenArea> areas = g.getAllAreas();
+		for (const auto& area : areas) {
+			sum += area.getArea() * area.getSidesCount();
 		}
 		return sum;
 	}
@@ -295,7 +334,12 @@ int main(int argc, char* args[])
 	for (const std::string& arg : runArgs) {
 		std::vector<std::string> lines{ aoc::loadFile(arg) };
 		Garden garden = parser.parseGarden(lines);
-		std::cout << calculator.calculateValue(garden);
+		std::cout << "Normal value: "
+			<< calculator.calculateValue(garden)
+			<< std::endl
+			<< "Discounted value: "
+			<< calculator.calculateDiscountedValue(garden)
+			<< std::endl;
 	}
 
 	return 0;

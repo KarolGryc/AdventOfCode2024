@@ -24,6 +24,9 @@ namespace aoc{
 	{
 		int x;
 		int y;
+		Vec2D operator+(const Vec2D& v) const {
+			return {x + v.x, y + v.y};
+		}
 	};
 
 	struct Position
