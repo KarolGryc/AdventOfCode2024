@@ -19,7 +19,7 @@ namespace aoc{
 		}
 		return false;
 	}
-	
+
 	struct Vec2D
 	{
 		int64_t x;
@@ -27,19 +27,23 @@ namespace aoc{
 		Vec2D operator+(const Vec2D& v) const {
 			return {x + v.x, y + v.y};
 		}
+
+		Vec2D operator*(int64_t scalar) const {
+			return {x * scalar, y * scalar};
+		}
 	};
 
 	struct Position
 	{
 		int64_t x;
 		int64_t y;
-		
+
 		bool operator==(const Position& p) const { return p.x == x && p.y == y; }
 		Vec2D operator-(const Position& p) const { return { x - p.x, y - p.y }; }
 		Position operator+(const Vec2D& v) const { return { x + v.x, y + v.y }; }
 		Position operator+=(const Vec2D& v) { return *this = *this + v; }
 	};
-	
+
 	class SimpleClock {
 	private:
 		std::chrono::high_resolution_clock::time_point startTime;
