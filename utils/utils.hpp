@@ -31,6 +31,10 @@ namespace aoc{
 		Vec2D operator*(int64_t scalar) const {
 			return {x * scalar, y * scalar};
 		}
+
+		bool operator==(const Vec2D& v) const {
+			return v.x == x && v.y == y;
+		}
 	};
 
 	struct Position

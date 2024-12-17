@@ -1,6 +1,8 @@
 ﻿#include <utils.hpp>
 #include <memory>
 
+// ugh, solution straight from nightmare
+
 class BoardElement
 {
 public:
@@ -22,6 +24,12 @@ public:
 		return true;
 	}
 };
+
+class BoxL : public Box
+{};
+
+class BoxR : public Box
+{};
 
 class Warehouse
 {
@@ -62,7 +70,21 @@ public:
 
 				const auto& element = row[x];
 				if (element) {
-					std::cout << (element->isMovable() ? "O " : "# ");
+					if (!element->isMovable()) {
+						std::cout << "# ";
+					}
+					else if (std::dynamic_pointer_cast<BoxL>(element)) {
+						std::cout << "[ ";
+					}
+					else if (std::dynamic_pointer_cast<BoxR>(element)) {
+						std::cout << "] ";
+					}
+					else if (std::dynamic_pointer_cast<Box>(element)) {
+						std::cout << "O ";
+					}
+					else {
+						std::cout << "? ";
+					}
 				}
 				else {
 					std::cout << ". ";
@@ -81,7 +103,7 @@ public:
 				m_robotPos = nextPos;
 			}
 			else {
-				if (moveIsPossible(nextPos, move)) {
+				if (isMovePossible(nextPos, move)) {
 					moveWithPush(nextPos, move);
 					m_robotPos = nextPos;
 				}
@@ -91,11 +113,13 @@ public:
 
 	uint64_t sumOfCoordinatesGPS() const {
 		uint64_t sum{};
-		for (int y = 0; y < sizeY(); ++y) {
-			for (int x = 0; x < sizeX(); ++x) {
+		for (int64_t y = 0; y < (int64_t)sizeY(); ++y) {
+			for (int64_t x = 0; x < (int64_t)sizeX(); ++x) {
 				auto& el = at({ x,y });
 				if (el != nullptr && el->isMovable()) {
-					sum += y * 100 + x;
+					if (!std::dynamic_pointer_cast<BoxR>(el)) {
+						sum += y * 100 + x;
+					}
 				}
 			}
 		}
@@ -103,32 +127,60 @@ public:
 	}
 
 private:
-	bool moveIsPossible(aoc::Position pos, aoc::Vec2D v)
+	bool isMovePossible(aoc::Position pos, aoc::Vec2D v)
 	{
 		aoc::Position nextField = pos + v;
 		if (!contains(pos)) {
 			return false;
 		}
 
-		if (at(pos) == nullptr) {
+		// RTTI horror x_x
+		std::shared_ptr<BoardElement> el = at(pos);
+		if (el == nullptr) {
 			return true;
 		}
-		else if (at(pos)->isMovable()) {
-			return moveIsPossible(nextField, v);
+		else if (el->isMovable()) {
+			bool isNeighbourValid = true;
+			if (v == aoc::Vec2D{ 0,1 } || v == aoc::Vec2D{0, -1}) {
+				if (std::dynamic_pointer_cast<BoxL>(el)) {
+					aoc::Position nextForRight = nextField + aoc::Vec2D{ 1,0 };
+					isNeighbourValid = isMovePossible(nextForRight, v);
+				}
+				else if (std::dynamic_pointer_cast<BoxR>(el)) {
+					aoc::Position nextForLeft = nextField + aoc::Vec2D{ -1,0 };
+					isNeighbourValid = isMovePossible(nextForLeft, v);
+				}
+			}
+			return isNeighbourValid && isMovePossible(nextField, v);
 		}
 		else {
 			return false;
 		}
 	}
 
-	void moveWithPush(aoc::Position pos, aoc::Vec2D v)
+	void moveWithPush(aoc::Position pos, aoc::Vec2D v, std::unordered_set<aoc::Position> visited = {})
 	{
+		if (visited.contains(pos)) {
+			return;
+		}
+		visited.insert(pos);
+
+		// RTTI horror x_x
+		std::shared_ptr<BoardElement> curr = at(pos);
+		if (std::dynamic_pointer_cast<BoxL>(curr)) {
+			moveWithPush(pos + aoc::Vec2D{ 1, 0}, v, visited);
+		}
+		else if (std::dynamic_pointer_cast<BoxR>(curr)) {
+			moveWithPush(pos + aoc::Vec2D{ -1, 0 }, v, visited);
+		}
+
 		aoc::Position nextField = pos + v;
 		if (at(nextField) != nullptr) {
 			if (at(nextField)->isMovable()) {
-				moveWithPush(nextField, v);
+				moveWithPush(nextField, v, visited);
 			}
 		}
+
 		std::swap(at(pos), at(nextField));
 	}
 
@@ -156,6 +208,42 @@ public:
 				else if (c == box) parsedElement = std::make_shared<Box>();
 				else if (c == robot) robotInitPos = { x, y };
 				parsedRow.push_back(parsedElement);
+			}
+
+			parsedTiles.push_back(std::move(parsedRow));
+		}
+
+		return Warehouse{ std::move(parsedTiles), robotInitPos };
+	}
+
+	Warehouse parseWideWarehouse(const std::vector<std::string>& lines)
+	{
+		std::vector<std::vector<std::shared_ptr<BoardElement>>> parsedTiles;
+		aoc::Position robotInitPos{};
+
+		for (int y = 0; y < lines.size(); y++) {
+			const std::string& line = lines[y];
+
+			std::vector<std::shared_ptr<BoardElement>> parsedRow;
+			for (int x = 0; x < line.size(); x++) {
+				char c = line[x];
+				if (c == wall) {
+					parsedRow.push_back(std::make_shared<Wall>());
+					parsedRow.push_back(std::make_shared<Wall>());
+				}
+				else if (c == box) {
+					parsedRow.push_back(std::make_shared<BoxL>());
+					parsedRow.push_back(std::make_shared<BoxR>());
+				}
+				else {
+					if (c == robot) {
+						int64_t robotX = static_cast<int64_t>(parsedRow.size());
+						int64_t robotY = y;
+						robotInitPos = { robotX, robotY };
+					}
+					parsedRow.push_back(nullptr);
+					parsedRow.push_back(nullptr);
+				}
 			}
 
 			parsedTiles.push_back(std::move(parsedRow));
@@ -220,7 +308,7 @@ int main(int argc, char* args[])
 	auto runArgs = aoc::argsToString(argc - 1, args + 1);
 
 	if (runArgs.empty()) {
-		const std::string defaultFile = "input.txt";
+		const std::string defaultFile = "picoExample.txt";
 		std::cerr << "No args given, running default file: " << defaultFile;
 		runArgs.push_back(defaultFile);
 	}
@@ -228,12 +316,21 @@ int main(int argc, char* args[])
 	WarehouseParser parser;
 	for (const std::string& arg : runArgs) {
 		try {
+			// load data from file
 			std::vector<std::string> lines{ aoc::loadFile(arg) };
-			auto data = parser.splitData(lines);
-			auto warehouse = parser.parseWarehouse(data.first);
-			auto moves = parser.parseMoves(data.second);
+			auto [warehouseLines, movesLines] = parser.splitData(lines);
+			auto warehouse = parser.parseWarehouse(warehouseLines);
+			auto moves = parser.parseMoves(movesLines);
+
+			// GPS coords for normal warehouse
 			warehouse.performMoves(moves);
 			std::cout << "Sum of GPS coord: " << warehouse.sumOfCoordinatesGPS() << std::endl;
+
+			// GPS coords for wide warehouse
+			auto wideWarehouse = parser.parseWideWarehouse(warehouseLines);
+			wideWarehouse.performMoves(moves);
+			std::cout << "Sum of GPS coord for wide boxes: " 
+				<< wideWarehouse.sumOfCoordinatesGPS() << std::endl;
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
