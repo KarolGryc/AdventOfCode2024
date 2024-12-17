@@ -1,5 +1,9 @@
 ﻿#include <utils.hpp>
 #include <regex>
+#include <queue>
+#include <algorithm>
+
+// horrible code
 
 struct Robot
 {
@@ -83,7 +87,7 @@ public:
 		return m_robots;
 	}
 
-	std::vector<Robot> getRobotsQuadrant(uint8_t quadrant) const
+	std::vector<Robot> getRobotsQuadrant(int64_t quadrant) const
 	{
 		std::vector<Robot> robots;
 
@@ -95,8 +99,62 @@ public:
 
 		return robots;
 	}
+
+	void display() const 
+	{
+		for (int64_t y = 0; y < m_sizeY; ++y) {
+			for (int64_t x = 0; x < m_sizeX; ++x) {
+				std::cout << ((countRobotsOn({ x,y }) != 0) ? "R " : "  ");
+			}
+			std::cout << std::endl;
+		}
+		std::cout << std::endl;
+	}
+
+	double robotsStdPosY() const
+	{
+		double avg = robotsAverageY();
+		double sum = 0.0;
+		for (const Robot& robot : m_robots)
+		{
+			double diff = avg - robot.pos.y;
+			sum += diff * diff;
+		}
+		return sqrt(sum / m_robots.size() - 1);
+	}
+
+	double robotsStdPosX() const
+	{
+		double avg = robotsAverageX();
+		double sum = 0.0;
+		for (const Robot& robot : m_robots)
+		{
+			double diff = avg - robot.pos.x;
+			sum += diff * diff;
+		}
+		return sqrt(sum / m_robots.size() - 1);
+	}
+
 private:
-	bool isInQuadrant(const aoc::Position& p, uint8_t quadrant) const
+	double robotsAverageX() const
+	{
+		double sum = 0.0;
+		for (const auto& robot : m_robots) {
+			sum += robot.pos.x;
+		}
+		return sum / m_robots.size();
+	}
+
+	double robotsAverageY() const
+	{
+		double sum = 0.0;
+		for (const auto& robot : m_robots) {
+			sum += robot.pos.y;
+		}
+		return sum / m_robots.size();
+	}
+
+	bool isInQuadrant(const aoc::Position& p, int64_t quadrant) const
 	{
 		if (quadrant == 0) {
 			return p.x >= 0 && p.x < m_sizeX / 2 && p.y >= 0 && p.y < m_sizeY / 2;
@@ -115,11 +173,6 @@ private:
 
 	void moveRobot(Robot& robot, int64_t dt)
 	{
-		auto& x = robot.pos.x;
-		auto& y = robot.pos.y;
-		auto& vx = robot.velocity.x;
-		auto& vy = robot.velocity.y;
-//		std::cout << "Old pos: " << x << " " << y << "V=" << vx << " " <<  vy <<  std::endl;
 		robot.move(dt);
 		while (robot.pos.x < 0) {
 			robot.pos.x += m_sizeX;
@@ -130,7 +183,17 @@ private:
 			robot.pos.y += m_sizeY;
 		}
 		robot.pos.y %= m_sizeY;
-//		std::cout << "New pos: " << x << " " << y << "V=" << vx << " " <<  vy <<  std::endl;
+	}
+
+	int64_t countRobotsOn(const aoc::Position& p) const 
+	{
+		int64_t cnt = 0;
+		for (auto& robot : m_robots) {
+			if (robot.pos == p) {
+				++cnt;
+			}
+		}
+		return cnt;
 	}
 
 	int64_t m_sizeX;
@@ -142,18 +205,35 @@ private:
 class RobotsSolution
 {
 public:
-	uint64_t getSafetyFactor(const Restroom& restroom)
+	uint64_t getSafetyFactor(Restroom restroom, int64_t dt)
 	{
+		restroom.moveAllRobots(100);
 		int64_t safetyFactor = 1;
 		for (int64_t i = 0; i < 4; ++i) {
 			const auto robots = restroom.getRobotsQuadrant(i);
-			std::cout << std::endl << robots.size() <<std::endl;
 			safetyFactor *= robots.size();
 		}
 
 		return safetyFactor;
 	}
 
+	std::vector<std::pair<int64_t, double>> dtWithLeastStdProduct(
+		Restroom startState, 
+		int64_t maxDt) const
+	{
+		std::vector<std::pair<int64_t, double>> iterationsWithStd;
+		for (int64_t i = 1; i <= maxDt; ++i) {
+			startState.moveAllRobots(1);
+			double stdX = startState.robotsStdPosX();
+			double stdY = startState.robotsStdPosY();
+			iterationsWithStd.emplace_back(i, stdX * stdY);
+		}
+
+		std::sort(iterationsWithStd.begin(), iterationsWithStd.end(),
+			[](const auto& a, const auto& b) { return a.second < b.second; });
+
+		return iterationsWithStd;
+	}
 };
 
 
@@ -170,13 +250,27 @@ int main(int argc, char* args[])
 	RobotParser parser;
 	RobotsSolution solution;
 	for (const std::string& arg : runArgs) {
-		std::vector<std::string> lines{ aoc::loadFile(arg) };
-		auto robots = parser.parseRobots(lines);
-		Restroom restroom (101, 103, robots);
-		restroom.moveAllRobots(100);
-		std::cout << "Safety factor: "
-			<< solution.getSafetyFactor(restroom)
-			<< std::endl;
+		try {
+			std::vector<std::string> lines{ aoc::loadFile(arg) };
+			auto robots = parser.parseRobots(lines);
+			Restroom restroom (101, 103, robots);
+			uint64_t dt = 100;
+			std::cout << "Safety factor after " << dt << " s: "
+				<< solution.getSafetyFactor(restroom, 100)
+				<< std::endl;
+
+			auto sortedResults = solution.dtWithLeastStdProduct(restroom, 10000);
+			std::cout << "Element with christmas tree (smallest std): "
+				<< sortedResults.front().first
+				<< std::endl;
+
+			Restroom room(restroom);
+			room.moveAllRobots(sortedResults.front().first);
+			room.display();
+		}
+		catch (std::exception& e) {
+			std::cerr << e.what() << std::endl;
+		}
 	}
 
 	return 0;

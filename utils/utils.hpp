@@ -75,6 +75,6 @@ struct std::hash<aoc::Position>
 {
 	std::size_t operator() (const aoc::Position& p) const 
 	{
-		return std::hash<int>()(p.x) ^ hash<int>()(p.y) << 1;
+		return std::hash<int64_t>()(p.x) ^ hash<int64_t>()(p.y) << 1;
 	}
 };
