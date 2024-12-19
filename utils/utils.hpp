@@ -24,15 +24,15 @@ namespace aoc{
 	{
 		int64_t x;
 		int64_t y;
-		Vec2D operator+(const Vec2D& v) const {
+		constexpr Vec2D operator+(const Vec2D& v) const {
 			return {x + v.x, y + v.y};
 		}
 
-		Vec2D operator*(int64_t scalar) const {
+		constexpr Vec2D operator*(int64_t scalar) const {
 			return {x * scalar, y * scalar};
 		}
 
-		bool operator==(const Vec2D& v) const {
+		constexpr bool operator==(const Vec2D& v) const {
 			return v.x == x && v.y == y;
 		}
 	};
@@ -42,10 +42,10 @@ namespace aoc{
 		int64_t x;
 		int64_t y;
 
-		bool operator==(const Position& p) const { return p.x == x && p.y == y; }
-		Vec2D operator-(const Position& p) const { return { x - p.x, y - p.y }; }
-		Position operator+(const Vec2D& v) const { return { x + v.x, y + v.y }; }
-		Position operator+=(const Vec2D& v) { return *this = *this + v; }
+		constexpr bool operator==(const Position& p) const { return p.x == x && p.y == y; }
+		constexpr Vec2D operator-(const Position& p) const { return { x - p.x, y - p.y }; }
+		constexpr Position operator+(const Vec2D& v) const { return { x + v.x, y + v.y }; }
+		constexpr Position operator+=(const Vec2D& v) { return *this = *this + v; }
 	};
 
 	class SimpleClock {
