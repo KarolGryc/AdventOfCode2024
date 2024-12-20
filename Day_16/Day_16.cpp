@@ -152,13 +152,13 @@ private:
 	{
 		aoc::Vec2D dirVec = getDirVector(n.dir);
 		
-		uint64_t cost = 1;
+		uint64_t cost = stepCost;
 		aoc::Position nextPos = n.pos + dirVec;
 		while (canVisit(map, nextPos)) {
 			if (isNode(map, nextPos)) {
 				return { {nextPos, n.dir}, cost };
 			}
-			cost++;
+			cost += stepCost;
 			nextPos += dirVec;
 		}
 
@@ -183,7 +183,7 @@ private:
 		std::array<Dir, 4> dirs = getAllDirs();
 		for (Dir dir : dirs) {
 			if (dir != n.dir && dir != getOppositeDir(n.dir)) {
-				edges.insert({ Node{n.pos,dir}, 1000 });
+				edges.insert({ Node{n.pos,dir}, turnCost });
 			}
 		}
 
@@ -289,6 +289,8 @@ private:
 	static constexpr char startField = 'S';
 	static constexpr char endField = 'E';
 	static constexpr char wallField = '#';
+	static constexpr uint64_t turnCost = 1000;
+	static constexpr uint64_t stepCost = 1;
 	static constexpr aoc::Position errorPos = { -1,-1 };
 	static constexpr Node errorNode = { errorPos, Dir::ERROR };
 
@@ -298,58 +300,140 @@ private:
 class MazeSolution
 {
 public:
-	uint64_t findMinScore(
-		const Maze& maze, 
-		const aoc::Position& startPos,
-		Dir startDir,
-		const aoc::Position& endPos) const
-	{
-		Maze::Graph graph = maze.getGraph();
+	using DistancesMap = std::unordered_map<Node, std::pair<uint64_t, std::vector<Node>>>;
 
-		Node startNode{ startPos, startDir };
-		if (!graph.contains(startNode)) {
+	uint64_t findMinScore(const Maze& maze, aoc::Position startPos, Dir startDir, aoc::Position endPos) const
+	{
+		DistancesMap distances = getMinimalDistances(maze.getGraph(), {startPos, startDir});
+		return minDistanceToField(distances, endPos);
+	}
+
+	uint64_t findMinScore(const DistancesMap& distances, aoc::Position endPos) const
+	{
+		return minDistanceToField(distances, endPos);
+	}
+
+	auto getUniqueMinPathTiles(const DistancesMap& distances, const aoc::Position& endPos) const
+		-> std::unordered_set<aoc::Position>
+	{
+		uint64_t minDist = findMinScore(distances, endPos);
+		std::queue<Node> nodesQueue;
+		for (const auto& dir : getAllDirs()) {
+			Node node{ endPos, dir };
+			if (distances.at(node).first == minDist) {
+				nodesQueue.push(node);
+			}
+		}
+
+		std::unordered_set<Node> visitedNodes;
+		std::unordered_set<aoc::Position> tiles;
+		while (!nodesQueue.empty()) {
+			Node n = nodesQueue.front();
+			nodesQueue.pop();
+
+			if (visitedNodes.contains(n)) {
+				continue;
+			}
+
+			auto& neighbours = distances.at(n).second;
+			for (auto& neighbour : neighbours) {
+				nodesQueue.push(neighbour);
+				auto t = getTilesBetween(n, neighbour);
+				tiles.insert(t.begin(), t.end());
+			}
+			visitedNodes.insert(n);
+		}
+
+		return tiles;
+	}
+
+	DistancesMap getMinimalDistances(const Maze::Graph& graph, const Node& from) const
+	{
+		if (!graph.contains(from)) {
 			throw std::invalid_argument("Graph doesn't contain start node");
 		}
 
 		std::unordered_set<Node> visitedNodes;
-		std::unordered_map<Node, uint64_t> distances;
+		DistancesMap distances = getDistancesMap(graph, from);
 
 		auto cmp = [&distances](const Node& a, const Node& b) {
-			return distances[a] > distances[b];
-		};
+			return distances[a].first > distances[b].first;
+			};
 		std::priority_queue<Node, std::vector<Node>, decltype(cmp)> pq(cmp);
 
-		distances[startNode] = 0;
-		for (auto& [node, edges] : graph) {
-			if (node != startNode) {
-				distances[node] = UINT64_MAX;
-			}
-		}
-		pq.push(startNode);
 
+		pq.push(from);
 		while (!pq.empty()) {
 			Node currNode = pq.top();
 			pq.pop();
-			const auto& neighbours = graph[currNode];
-			for (const auto& [node, dist] : neighbours) {
-				if (!visitedNodes.contains(node)) {
-					uint64_t newDist = distances[currNode] + dist;
-					if (newDist < distances[node]) {
-						distances[node] = newDist;
-						pq.push(node);
-					}
+			for (const auto& [node, dist] : graph.at(currNode)) {
+				if (visitedNodes.contains(node)) {
+					continue;
+				}
+
+				uint64_t newDist = distances[currNode].first + dist;
+				if (newDist < distances[node].first) {
+					distances[node].first = newDist;
+					distances[node].second.clear();
+					pq.push(node);
+				}
+
+				if (newDist <= distances[node].first) {
+					distances[node].second.push_back(currNode);
 				}
 			}
 			visitedNodes.insert(currNode);
 		}
+
+		return distances;
+	}
+
+private:
+	auto getTilesBetween(const Node& a, const Node& b) const
+		-> std::unordered_set<aoc::Position>
+	{
+		std::unordered_set<aoc::Position> result;
 		
-		uint64_t minDistToEnd = UINT64_MAX;
-		for (const auto& dir : getAllDirs()) {
-			Node endNode{ endPos, dir };
-			minDistToEnd = std::min(distances[endNode], minDistToEnd);
+		auto [xMin, xMax] = std::minmax(a.pos.x, b.pos.x);
+		auto [yMin, yMax] = std::minmax(a.pos.y, b.pos.y);
+
+		if (yMin == yMax) {
+			for (int64_t i = xMin; i <= xMax; i++) {
+				result.emplace(i, yMin);
+			}
+		}
+		else if (xMin == xMax) {
+			for (int64_t i = yMin; i <= yMax; i++) {
+				result.emplace(xMin, i);
+			}
+		}
+		else {
+			throw std::runtime_error("Nodes are not in straight line.");
 		}
 
-		return minDistToEnd;
+		return result;
+	}
+
+	auto getDistancesMap(const Maze::Graph& graph, const Node& startNode) const
+		-> DistancesMap
+	{
+		DistancesMap distances;
+		for (auto& [node, edges] : graph) {
+			distances[node] = { UINT64_MAX, {} };
+		}
+		distances[startNode] = { 0ull, {} };
+		
+		return distances;
+	}
+
+	uint64_t minDistanceToField(const DistancesMap& dist, const aoc::Position& p) const
+	{
+		uint64_t minDistToField = UINT64_MAX;
+		for (const auto& dir : getAllDirs()) {
+			Node fieldNode{ p, dir };
+			minDistToField = std::min(dist.at(fieldNode).first, minDistToField);
+		}
+		return minDistToField;
 	}
 };
 
@@ -358,7 +442,7 @@ int main(int argc, char* args[])
 	auto runArgs = aoc::argsToString(argc - 1, args + 1);
 
 	if (runArgs.empty()) {
-		const std::string defaultFile = "tinyExample.txt";
+		const std::string defaultFile = "p2Example.txt";
 		std::cerr << "No args given, running default file: " 
 			<< defaultFile 
 			<< std::endl;
@@ -373,9 +457,13 @@ int main(int argc, char* args[])
 			Maze maze = parser.parseMaze(lines);
 			aoc::Position startPos = parser.findStart(lines);
 			aoc::Position endPos = parser.findEnd(lines);
-			std::cout << "Result: " 
-				<< solution.findMinScore(maze, startPos, Dir::EAST, endPos)
-				<< std::endl;
+			Node startNode{ startPos, Dir::EAST };
+			auto distMap = solution.getMinimalDistances(maze.getGraph(), startNode);
+			std::cout << "Minimal score: "
+				<< solution.findMinScore(distMap, endPos)
+				<< std::endl
+				<< "Unique tiles in minimal paths:"
+				<< solution.getUniqueMinPathTiles(distMap, endPos).size();
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
