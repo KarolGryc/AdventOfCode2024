@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <iostream>
+#include <array>
 
 namespace aoc{
 	std::vector<std::string> argsToString(int argc, char* args[]);
@@ -34,6 +35,10 @@ namespace aoc{
 
 		constexpr bool operator==(const Vec2D& v) const {
 			return v.x == x && v.y == y;
+		}
+
+		static constexpr std::array<Vec2D, 4> getUnitVectors() {
+			return { {{1, 0},{0, 1},{-1, 0},{0, -1}} };
 		}
 	};
 
