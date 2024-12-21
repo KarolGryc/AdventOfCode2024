@@ -5,17 +5,12 @@
 class FallingBytesParser
 {
 public:
-	std::unordered_set<aoc::Position> parseFallingBytes(const std::vector<std::string>& lines, uint64_t parseFirst = UINT64_MAX) const
+	std::vector<aoc::Position> parseFallingBytes(const std::vector<std::string>& lines) const
 	{
-		std::unordered_set<aoc::Position> bytePoisitions;
-		uint64_t cnt = 0;
+		std::vector<aoc::Position> bytePoisitions;
 		for (auto& line : lines) {
-			if (cnt >= parseFirst) {
-				break;
-			}
 			aoc::Position bytePos = parseByte(line);
-			bytePoisitions.insert(bytePos);
-			++cnt;
+			bytePoisitions.push_back(bytePos);
 		}
 
 		return bytePoisitions;
@@ -25,8 +20,7 @@ private:
 	aoc::Position parseByte(const std::string& line) const
 	{
 		std::stringstream ss(line);
-		int64_t x;
-		int64_t y;
+		int64_t x,y;
 		char separator;
 		ss >> x >> separator >> y;
 
@@ -41,65 +35,60 @@ private:
 class MemoryPathFinder
 {
 public:
-	uint64_t shortestExitPathLength(
+	uint64_t exitPathLength(
 		int64_t memSizeX,
 		int64_t memSizeY,
 		const std::unordered_set<aoc::Position>& corruptedPositions) const
 	{
-		printBoard(memSizeX, memSizeY, corruptedPositions);
-
-		std::unordered_set<aoc::Position> visited;
-		std::queue<std::pair<aoc::Position, uint64_t>> positionsToVisit;
+		static constexpr aoc::Position startPos{ 0,0 };
+		static constexpr uint64_t startCost{};
+		std::unordered_set<aoc::Position> included{startPos};
+		std::queue<std::pair<aoc::Position, uint64_t>> positionsToVisit{ {{startPos, startCost}} };
 		aoc::Position goal = { memSizeX - 1, memSizeY - 1 };
-		positionsToVisit.push({ {0,0}, 0 });
 
 		while (!positionsToVisit.empty()) {
-			const aoc::Position currPos = positionsToVisit.front().first;
-			const uint64_t cost = positionsToVisit.front().second;
-			positionsToVisit.pop();
+			const auto& [currPos, cost] = positionsToVisit.front();
 			if (currPos == goal) {
 				return cost;
 			}
 
-			visited.insert(currPos);
-			aoc::Vec2D offsets[] = { {1, 0}, { 0, 1 }, { -1, 0 }, { 0, -1 } };
-			for (aoc::Vec2D uVec : offsets) {
-				const aoc::Position newPos = currPos + uVec;
-				if (memContains(newPos, memSizeX, memSizeY) && !visited.contains(newPos)) {
-					if (!corruptedPositions.contains(newPos)) {
-						positionsToVisit.push({newPos, cost + 1});
-						std::cout << "Contains " << visited.contains(newPos) << " ";
-						std::cout << "Pushing " << newPos.x << " " << newPos.y << std::endl;
-					}
+			for (auto& uVec : aoc::Vec2D::getUnitVectors()) {
+				const auto newPos = currPos + uVec;
+				if (memContains(newPos, memSizeX, memSizeY) && 
+					!included.contains(newPos) &&
+					!corruptedPositions.contains(newPos))
+				{
+					positionsToVisit.push({newPos, cost + 1});
+					included.insert(newPos);
 				}
 			}
+			positionsToVisit.pop();
 		}
 
 		return UINT64_MAX;
+	}
+
+	aoc::Position firstBlockingByte(
+		int64_t memSizeX,
+		int64_t memSizeY,
+		const std::vector<aoc::Position>& corruptedPositions) const
+	{
+		std::unordered_set<aoc::Position> fallenBytes{};
+		for (auto& bytePos : corruptedPositions) {
+			fallenBytes.insert(bytePos);
+			uint64_t exitPathLen = exitPathLength(memSizeX, memSizeY, fallenBytes);
+			if (exitPathLen == UINT64_MAX) {
+				return bytePos;
+			}
+		}
+
+		throw std::exception("No blocking byte found");
 	}
 
 private:
 	bool memContains(const aoc::Position& p, int64_t sizeX, int64_t sizeY) const 
 	{
 		return p.y >= 0 && p.y < sizeY && p.x >= 0 && p.x < sizeX;
-	}
-
-	void printBoard(
-		int64_t memSizeX,
-		int64_t memSizeY,
-		const std::unordered_set<aoc::Position>& corruptedPositions) const
-	{
-		for (int64_t i = 0; i < memSizeY; i++) {
-			for (int64_t j = 0; j < memSizeX; j++) {
-				if (corruptedPositions.contains({ i,j })) {
-					std::cout << "# ";
-				}
-				else {
-					std::cout << ". ";
-				}
-			}
-			std::cout << std::endl;
-		}
 	}
 };
 
@@ -119,13 +108,21 @@ int main(int argc, char* args[])
 	MemoryPathFinder solution;
 	for (const std::string& arg : runArgs) {
 		try {
-			constexpr int64_t memSizeX = 71;
-			constexpr int64_t memSizeY = 71;
-			constexpr uint64_t parsedBytesNum = 1024;
+			constexpr int64_t mSizeX = 71;
+			constexpr int64_t mSizeY = 71;
+			constexpr uint64_t fallenBytesNum = 1024;
 			auto lines = aoc::loadFile(arg);
-			auto bytes = parser.parseFallingBytes(lines, parsedBytesNum);
-			std::cout 
-				<< solution.shortestExitPathLength(memSizeX, memSizeY, bytes)
+			auto bytes = parser.parseFallingBytes(lines);
+			std::unordered_set<aoc::Position> p1BytesSet =
+				{ bytes.begin(), bytes.begin() + fallenBytesNum };
+
+			std::cout << "Shortest exit path length for part 1: "
+				<< solution.exitPathLength(mSizeX, mSizeY, p1BytesSet)
+				<< std::endl;
+
+			auto blockingByte = solution.firstBlockingByte(mSizeX, mSizeY, bytes);
+			std::cout << "First blocking byte: "
+				<< blockingByte.x << "," << blockingByte.y
 				<< std::endl;
 		}
 		catch (std::exception& e) {
