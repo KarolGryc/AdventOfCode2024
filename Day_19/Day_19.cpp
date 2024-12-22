@@ -1,6 +1,7 @@
 ﻿#include <utils.hpp>
 #include <regex>
 #include <stack>
+#include <unordered_map>
 
 class TowelParser
 {
@@ -40,10 +41,12 @@ public:
 	}
 };
 
+
+
 class TowelsSolution
 {
 public:
-	uint64_t countPossiblePatterns(
+	uint64_t countPossible(
 		const std::vector<std::string>& availableTowels,
 		const std::vector<std::string>& patterns) const
 	{
@@ -54,6 +57,21 @@ public:
 
 		return count;
 	}
+
+
+	uint64_t countWaysToAchieve(
+		const std::vector<std::string>& availableTowels,
+		const std::vector<std::string>& patterns) const
+	{
+		uint64_t count{};
+		std::unordered_map<std::string, uint64_t> cache;
+		for (const auto& pattern : patterns) {
+			count += countWaysToAchieve(availableTowels, pattern.cbegin(), pattern.cend(), cache);
+		}
+
+		return count;
+	}
+
 
 	bool isPatternPossible(
 		const std::vector<std::string>& availableTowels,
@@ -81,7 +99,62 @@ public:
 		return false;
 	}
 
+
+	[[deprecated]] // slow, memory efficient
+	uint64_t __slow__countWaysToAchieve(
+		const std::vector<std::string>& availableTowels,
+		const std::string& pattern) const
+	{
+		uint64_t count{};
+		std::stack<std::string::const_iterator> stack({ pattern.cbegin() });
+		const std::string::const_iterator end = pattern.cend();
+
+		while (!stack.empty()) {
+			const std::string::const_iterator begin = stack.top();
+			stack.pop();
+			for (const auto& towel : availableTowels) {
+				if (patternBeginsWith(begin, end, towel)) {
+					auto newBegin = begin + towel.size();
+					if (newBegin == end) {
+						++count;
+					}
+					else {
+						stack.push(newBegin);
+					}
+				}
+			}
+		}
+
+		return count;
+	}
+
+
 private:
+	uint64_t countWaysToAchieve(
+		const std::vector<std::string>& towels,
+		const std::string::const_iterator& begin,
+		const std::string::const_iterator& end,
+		std::unordered_map<std::string, uint64_t>& dp) const
+	{
+		uint64_t count{};
+		for (const auto& towel : towels) {
+			if (patternBeginsWith(begin, end, towel)) {
+				auto newBegin = begin + towel.size();
+				std::string subPattern{ newBegin, end };
+				if(newBegin == end){
+					dp[subPattern] = 1;
+				}
+				else if(!dp.contains(subPattern)){
+					dp[subPattern] = countWaysToAchieve(towels, newBegin, end, dp);
+				}
+
+				count += dp[subPattern];
+			}
+		}
+		return count;
+	}
+
+
 	bool patternBeginsWith(
 		std::string::const_iterator patternBegin,
 		const std::string::const_iterator& patternEnd,
@@ -101,6 +174,8 @@ private:
 		return true;
 	}
 };
+
+
 
 int main(int argc, char* args[])
 {
@@ -123,7 +198,10 @@ int main(int argc, char* args[])
 			auto patterns = parser.parsePatterns(lines);
 
 			std::cout << "Possible patterns num: "
-				<< solution.countPossiblePatterns(towels, patterns);
+				<< solution.countPossible(towels, patterns)
+				<< std::endl
+				<< "Num of ways to achieve all patterns: "
+				<< solution.countWaysToAchieve(towels, patterns);
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
