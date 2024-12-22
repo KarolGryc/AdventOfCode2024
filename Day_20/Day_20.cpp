@@ -1,6 +1,7 @@
 ﻿#include <utils.hpp>
 #include <unordered_map>
 #include <queue>
+#include <iomanip>
 
 class RaceTrack
 {
@@ -199,21 +200,21 @@ public:
 		return visited;
 	}
 
-	uint64_t numOfSkips(const RaceTrack& track, int64_t costTreshhold = 100)
+	uint64_t numOfSkips(const RaceTrack& track, int64_t cheatTime, int64_t minSaved) const
 	{
+		if (cheatTime <= 1 || minSaved <= 0) {
+			return 0;
+		}
+
 		std::unordered_map<aoc::Position, uint64_t> fields = getDistances(track);
-		
+		auto offsets = generateOffsetVecs(cheatTime);
 		uint64_t cnt{};
 		for (auto& field : fields) {
-			auto walls = neighbours(field.first, track, RaceTrack::Field::WALL);
-			for (auto& wall : walls) {
-				auto trackFields = neighbours(wall, track);
-				for (auto& trackField : trackFields) {
-					int64_t trackFieldCost = fields[trackField];
-					int64_t fieldCost = field.second;
-					if ((trackFieldCost - fieldCost - 2) >= costTreshhold) {
-						++cnt;
-					}
+			const auto& [currPos, _] = field;
+			for (const auto& offset : offsets) {
+				const auto& nPos = currPos + offset;
+				if (fields.contains(nPos) && isSkipValid(field, { nPos, fields[nPos] }, minSaved)) {
+					++cnt;
 				}
 			}
 		}
@@ -222,6 +223,40 @@ public:
 	}
 
 private:
+	bool isSkipValid(
+		const std::pair<aoc::Position, uint64_t>& oldField,
+		const std::pair<aoc::Position, uint64_t>& newField,
+		int64_t minSavedCost
+	) const
+	{
+		int64_t oldCost = static_cast<int64_t>(oldField.second);
+		int64_t newCost = static_cast<int64_t>(newField.second);
+		aoc::Position oldPos = oldField.first;
+		aoc::Position newPos = newField.first;
+		aoc::Vec2D distanceV = newPos - oldPos;
+		int64_t distance = std::abs(distanceV.x) + std::abs(distanceV.y);
+		int64_t savedCost = newCost - oldCost - distance;
+		return savedCost >= minSavedCost;
+	}
+
+	std::vector<aoc::Vec2D> generateOffsetVecs(int64_t radius) const
+	{
+		if (radius <= 0) {
+			return {};
+		}
+
+		std::vector<aoc::Vec2D> offsets;
+		for (int64_t yOff = -radius; yOff <= radius; ++yOff) {
+			for (int64_t xOff = -radius; xOff <= radius; ++xOff) {
+				if (!(yOff == 0 && xOff == 0) &&std::abs(yOff) + std::abs(xOff) <= radius) {
+					offsets.push_back({ xOff,yOff });
+				}
+			}
+		}
+
+		return offsets;
+	}
+
 	std::vector<aoc::Position> neighbours(
 		const aoc::Position& pos,
 		const RaceTrack& track,
@@ -245,7 +280,7 @@ int main(int argc, char* args[])
 	auto runArgs = aoc::argsToString(argc - 1, args + 1);
 
 	if (runArgs.empty()) {
-		const std::string defaultFile = "example.txt";
+		const std::string defaultFile = "input.txt";
 		std::cerr << "No args given, running default file: " 
 			<< defaultFile 
 			<< std::endl;
@@ -258,9 +293,11 @@ int main(int argc, char* args[])
 		try {
 			auto lines = aoc::loadFile(arg);
 			auto track = parser.parseRaceTrack(lines);
-			std::cout << "Let's go!" << std::endl;
-			std::cout << "Num of skips above 100ps: "
-				<< solution.numOfSkips(track, 100);
+			static constexpr int savedCost = 100;
+			static constexpr int cheatTime = 20;
+			std::cout << "Num of skips saving " << savedCost 
+				<< " for " << cheatTime << " ps: "
+				<< solution.numOfSkips(track, cheatTime, savedCost) << std::endl;
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
