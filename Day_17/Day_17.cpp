@@ -1,27 +1,37 @@
 ﻿#include <utils.hpp>
 #include <regex>
 #include <unordered_map>
+#include <functional>
+#include <queue>
+#include <deque>
 
 using Program = std::vector<uint8_t>;
 
-class ChronospatialComputer
+class Computer
 {
 public:
-	ChronospatialComputer(std::ostream& output, uint64_t regA = 0, uint64_t regB = 0, uint64_t regC = 0)
+	Computer(std::function<void(uint8_t)> output, uint64_t regA = 0, uint64_t regB = 0, uint64_t regC = 0)
 		: m_output{output}, m_regA{regA}, m_regB{regB}, m_regC{regC}
 	{}
 
-	void execute(const Program& program)
+	void setRegA(uint64_t regA)
 	{
-		m_alreadyPrinted = false;
-		
+		m_regA = regA;
+	}
+
+	void executeProgram(const Program& program)
+	{
 		while (m_instrPtr < (int64_t)program.size()) {
-			uint8_t opCode = program[m_instrPtr];
-			uint8_t operand = program[m_instrPtr + 1];
-			Instruction instr = fetchInstruction(opCode);
-			(this->*(instr))(operand);
+			auto [opCode, operand] = fetch(program);
+			Instruction instr = decode(opCode);
+			execute(instr, operand);
 			incrementInstrPtr();
 		}
+	}
+
+	void setOutput(std::function<void(uint8_t)> output)
+	{
+		m_output = output;
 	}
 
 private:
@@ -30,11 +40,21 @@ private:
 		m_instrPtr += 2;
 	}
 
-	using Instruction = void(ChronospatialComputer::*)(uint8_t);
-	Instruction fetchInstruction(uint8_t opCode)
+	std::pair<uint8_t, uint8_t> fetch(const Program& program) const 
+	{
+		return { program[m_instrPtr], program[m_instrPtr + 1]};
+	}
+
+	using Instruction = void(Computer::*)(uint8_t);
+	Instruction decode(uint8_t opCode)
 	{
 		auto instr = m_instructions[opCode];
 		return instr;
+	}
+
+	void execute(Instruction instr, uint8_t operand)
+	{
+		(this->*(instr))(operand);
 	}
 
 	void adv(uint8_t operand)
@@ -66,11 +86,7 @@ private:
 
 	void out(uint8_t operand)
 	{
-		if (m_alreadyPrinted) {
-			m_output << ',';
-		}
-		m_output << (comboOperandVal(operand) & 7);
-		m_alreadyPrinted = true;
+		m_output(static_cast<uint8_t>(comboOperandVal(operand) & 7));
 	}
 
 	void bdv(uint8_t operand)
@@ -114,8 +130,7 @@ private:
 			&cdv,
 	};
 
-	bool m_alreadyPrinted = false;
-	std::ostream& m_output;
+	std::function<void(uint8_t)> m_output;
 	int64_t m_instrPtr{};
 	uint64_t m_regA;
 	uint64_t m_regB;
@@ -125,10 +140,12 @@ private:
 class ChronospatialComputerParser
 {
 public:
-	ChronospatialComputer parseComputer(const std::vector<std::string>& lines)
+	Computer parseComputer(
+		const std::vector<std::string>& lines, 
+		std::function<void(uint8_t)> outputCallback) const
 	{
 		std::unordered_map<char, uint64_t> regs = parseRegisters(lines);
-		return { std::cout, regs['A'], regs['B'], regs['C'] };
+		return { outputCallback, regs['A'], regs['B'], regs['C'] };
 	}
 
 	Program parseProgram(const std::vector<std::string>& lines)
@@ -182,6 +199,62 @@ private:
 	}
 };
 
+class StinkySolution
+{
+public:
+	uint64_t firstSelfPrintingValRegA(const Program& program) const
+	{
+		uint64_t result = UINT64_MAX;
+		std::queue<uint64_t> checkedNums{ {0ull} };
+		Program programReversed{ program.rbegin(), program.rend() };
+
+		while (!checkedNums.empty()) {
+			uint64_t num = checkedNums.front();
+			checkedNums.pop();
+			for (int i = 0; i <= 7; i++) {
+				// prepare computer and container for output
+				std::deque<uint8_t> printedNums;
+				Computer computer([&](uint8_t x) { printedNums.push_front(x); });
+
+				// set value of regA and execute
+				uint64_t regA = (num << 3) + i;
+				computer.setRegA(regA);
+				computer.executeProgram(program);
+
+				// if computer printed partially correct result finish or continue
+				// else ignore path
+				if (resultsOverlap(programReversed, printedNums)) {
+					if (programReversed.size() == printedNums.size()) {
+						result = std::min(regA, result);
+					}
+					else {
+						checkedNums.push(regA);
+					}
+				}
+			}
+		}
+		
+		return result;
+	}
+
+private:
+	bool resultsOverlap(const std::vector<uint8_t>& a, const std::deque<uint8_t>& b) const
+	{
+		if (b.size() > a.size()) {
+			return false;
+		}
+		
+		size_t i = 0;
+		for (auto it = b.begin(); it != b.end(); ++it) {
+			if (*it != a[i++]) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+};
+
 int main(int argc, char* args[])
 {
 	auto runArgs = aoc::argsToString(argc - 1, args + 1);
@@ -195,12 +268,24 @@ int main(int argc, char* args[])
 	}
 
 	ChronospatialComputerParser parser;
+	StinkySolution solution;
 	for (const std::string& arg : runArgs) {
 		try {
 			auto lines = aoc::loadFile(arg);
-			ChronospatialComputer computer = parser.parseComputer(lines);
+			Computer computer = parser.parseComputer(lines,
+				[printed = false](uint8_t response) mutable {
+					std::cout << (printed ? "," : "") << (int)response;
+					printed = true;
+				}
+			);
 			Program program = parser.parseProgram(lines);
-			computer.execute(program);
+			computer.executeProgram(program);
+
+			std::cout << std::endl
+				<< "Minimal self printing register A value: "
+				<< solution.firstSelfPrintingValRegA(program)
+				<< std::endl;
+
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
