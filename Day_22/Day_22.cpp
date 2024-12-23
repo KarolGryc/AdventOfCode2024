@@ -1,6 +1,8 @@
 ﻿#include <utils.hpp>
 #include <regex>
 #include <sstream>
+#include <bit>
+#include <unordered_map>
 
 class NumParser
 {
@@ -22,14 +24,86 @@ public:
 	}
 };
 
+class Sequence
+{
+public:
+	Sequence() = default;
+
+	bool operator==(const Sequence& seq) const
+	{
+		return m_num == seq.m_num;
+	}
+
+	void pushNum(uint8_t num)
+	{
+		static constexpr uint8_t bitsInByte = 8;
+		m_num <<= bitsInByte;
+		m_num |= static_cast<uint8_t>(num);
+	}
+
+
+	// 0 is newest, 3 is oldest
+	int8_t getNumInSeq(uint8_t index) const
+	{
+		if constexpr (std::endian::native == std::endian::little) {
+			return m_numBytes[index];
+		}
+		else if constexpr (std::endian::native == std::endian::big) {
+			return m_numBytes[3 - index];
+		}
+		else {
+			static_assert("Mixed endian?");
+		}
+	}
+
+	uint32_t getHash() const
+	{
+		return m_num;
+	}
+
+private:
+	union
+	{
+		uint32_t m_num;
+		int8_t m_numBytes[4];
+	};
+};
+
+template <> 
+struct std::hash<Sequence>
+{
+	size_t operator()(const Sequence& sequence) const
+	{
+		return sequence.getHash();
+	}
+};
+
 class MonkeysSolution
 {
 public:
-	uint64_t sumSecretNums(const std::vector<uint64_t>& nums, uint64_t numOfIterations) const
+	uint64_t maxBananasNum(const std::vector<uint64_t>& initialNums, uint64_t itNum) const
+	{
+		std::unordered_map<Sequence, uint64_t> bananasPerSequenceSum;
+		for (auto num : initialNums) {
+			auto&& sequencesToBananas = possibleBananas(num, itNum);
+			for (auto& el : sequencesToBananas) {
+				bananasPerSequenceSum[el.first] += el.second;
+			}
+		}
+
+		uint64_t maxBananas{};
+		for (auto& el : bananasPerSequenceSum) {
+			maxBananas = std::max(maxBananas, el.second);
+		}
+
+		return maxBananas;
+	}
+
+	uint64_t sumSecretNums(const std::vector<uint64_t>& nums, uint64_t itNum) const
 	{
 		uint64_t sum{};
 		for (auto& num : nums) {
-			sum += getSecretNumAfter(num, numOfIterations);
+			sum += getSecretNumAfter(num, itNum);
 		}
 		
 		return sum;
@@ -73,6 +147,40 @@ private:
 	{
 		return oldSecretNum ^ mixedNum;
 	}
+
+	std::unordered_map<Sequence, uint64_t> possibleBananas(uint64_t secretNum, uint64_t itNum) const
+	{
+		if (itNum <= 4) {
+			return {};
+		}
+
+		auto&& updateSeqAndNum = [this](Sequence& seq, uint64_t& secretNum) {
+			uint64_t newSecretNum = getNewSecretNum(secretNum);
+			int64_t priceDiff = getPrice(newSecretNum) - getPrice(secretNum);
+			seq.pushNum(static_cast<uint8_t>(priceDiff));
+			secretNum = newSecretNum;
+		};
+
+		std::unordered_map<Sequence, uint64_t> sequences;
+		Sequence currSeq{};
+		for (int i = 0; i < 4; i++) {
+			updateSeqAndNum(currSeq, secretNum);
+		}
+
+		for (uint64_t i = 4; i < itNum; i++) {
+			if (!sequences.contains(currSeq)) {
+				sequences[currSeq] = getPrice(secretNum);
+			}
+			updateSeqAndNum(currSeq, secretNum);
+		}
+
+		return sequences;
+	}
+
+	uint64_t getPrice(uint64_t secretNum) const
+	{
+		return secretNum % 10;
+	}
 };
 
 int main(int argc, char* args[])
@@ -93,8 +201,13 @@ int main(int argc, char* args[])
 			static constexpr uint64_t numOfIterations = 2000;
 			auto lines = aoc::loadFile(arg);
 			auto nums = parser.parseNums(lines);
-			std::cout << "Sum of secret nums after " << numOfIterations << ": "
-				<< solution.sumSecretNums(nums, numOfIterations) << std::endl;
+			std::cout 
+				<< "Sum of secret nums after " << numOfIterations << ": "
+				<< solution.sumSecretNums(nums, numOfIterations) 
+				<< std::endl
+				<< "Max number of bananas: "
+				<< solution.maxBananasNum(nums, numOfIterations) 
+				<< std::endl;
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
