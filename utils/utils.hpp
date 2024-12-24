@@ -5,7 +5,7 @@
 #include <iostream>
 #include <array>
 
-namespace aoc{
+namespace aoc {
 	std::vector<std::string> argsToString(int argc, char* args[]);
 	std::vector<std::string> loadFile(const std::string& fileName);
 	uint8_t countDigits(uint64_t num);
@@ -19,6 +19,14 @@ namespace aoc{
 			}
 		}
 		return false;
+	}
+
+	template<typename T>
+	void insertSet(const std::unordered_set<T>& from, std::unordered_set<T>& to)
+	{
+		for (auto& el : from) {
+			to.insert(el);
+		}
 	}
 
 	struct Vec2D
